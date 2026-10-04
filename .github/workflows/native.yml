@@ -1,0 +1,46 @@
+name: Native Rust desktop builds
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Cargo / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxkbcommon-dev libxi-dev libxrandr-dev
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --release --locked
+      - run: cargo build --release --locked
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (!(Test-Path target/release/mens-life.exe)) { throw 'Missing native executable' }
+          New-Item -ItemType Directory -Force artifacts/mens-life-windows-x64
+          Copy-Item target/release/mens-life.exe, README.md, THIRD_PARTY.md artifacts/mens-life-windows-x64/
+          New-Item -ItemType Directory -Force artifacts/mens-life-windows-x64/assets/fonts
+          Copy-Item assets/fonts/*.txt artifacts/mens-life-windows-x64/assets/fonts/
+      - if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mens-life-windows-x64
+          path: artifacts/mens-life-windows-x64/
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mens-life-linux-x64
+          path: target/release/mens-life

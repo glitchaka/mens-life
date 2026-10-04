@@ -1,5 +1,4 @@
-//! Scene construction lives in Rust. The browser bridge only turns these engine
-//! descriptors into Three.js objects, preserving the original renderer exactly.
+//! The room, furniture and articulated avatar, expressed as native mesh data.
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::f64::consts::PI;
