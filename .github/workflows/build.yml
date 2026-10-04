@@ -1,0 +1,51 @@
+name: Rust builds and original-game parity
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - run: npm run setup
+      - run: npm run build
+      - run: npm run verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mens-life-web
+          path: dist/
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - run: npm run setup
+      - run: npm run build:windows
+      - run: npm run verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mens-life-windows-x64
+          path: artifacts/mens-life-windows-x64/

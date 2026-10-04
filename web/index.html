@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Juego de simulación cotidiana en una habitación 3D.">
+  <title>Vida Isométrica 3D</title>
+  <link rel="icon" href="./favicon.svg">
+  <link rel="stylesheet" href="./preflight.css">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="antialiased">
+  <div id="app"></div>
+  <script type="module">
+    import init from './pkg/mens_life.js';
+    init().catch(error => {
+      console.error(error);
+      const box = document.createElement('p');
+      box.style.cssText = 'position:fixed;inset:20px auto auto 20px;padding:20px;background:#f4f1e7;border-radius:14px;max-width:520px';
+      box.textContent = 'No se pudo iniciar Vida Isométrica 3D. Comprueba que WebGL esté habilitado y vuelve a cargar.';
+      document.body.appendChild(box);
+    });
+  </script>
+</body>
+</html>
