@@ -43,6 +43,7 @@ if (process.argv.includes('--windows')) {
   const loader = readdirSync(registry).map(dir=>join(registry,dir,'webview2-com-sys-0.38.2','x64','WebView2Loader.dll')).find(existsSync);
   if (!loader) throw new Error('WebView2Loader.dll was not found; desktop packaging is incomplete.');
   cpSync(loader,join(release,'WebView2Loader.dll'));
+  for (const name of ['THREE-LICENSE.txt','TAILWIND-LICENSE.txt']) cpSync(join(dest,'vendor',name),join(release,name));
   writeFileSync(join(release,'LEEME.txt'),'Vida Isométrica 3D / Mens Life\n\nAbre mens-life.exe. Conserva WebView2Loader.dll junto al ejecutable.\nRequiere Windows 10/11 x64 y Microsoft Edge WebView2 Runtime.\nLa escena, WebAssembly y recursos están incluidos; no requiere conexión.\n');
   console.log('Windows x64 executable and loader ready in artifacts/mens-life-windows-x64/.');
 }

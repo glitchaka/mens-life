@@ -167,7 +167,7 @@ console.log(`Simulation parity: ${ops.length} operations match the original, inc
 const escaped={...defaultAvatar,name:'<img src=x onerror="bad()">& Ñ'};
 const safe=rust({mode:'scene',avatar:escaped,random});
 assert.deepEqual(normalizeUI(safe.ui),normalizeUI(originalUI(escaped)),'Name escaping and Unicode');
-const css=readFileSync('web/styles.css','utf8');
-const originalCss=readFileSync('tests/reference/original-globals.css','utf8').replace('@import "tailwindcss";\n','');
+const css=readFileSync('web/styles.css','utf8').replaceAll('\r\n','\n');
+const originalCss=readFileSync('tests/reference/original-globals.css','utf8').replaceAll('\r\n','\n').replace('@import "tailwindcss";\n','');
 assert.ok(css.startsWith(originalCss),'Original CSS must be preserved exactly');
 console.log('Styles and responsive rules are preserved; names remain escaped.');

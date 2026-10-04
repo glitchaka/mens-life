@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.wasm -text
+*.exe -text
+*.dll -text
+*.zip -text
