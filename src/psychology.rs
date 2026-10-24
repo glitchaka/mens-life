@@ -209,7 +209,7 @@ impl Expression {
         match self {
             Self::Calm => ":-)", Self::Happy => ":D", Self::Sad => ":-(",
             Self::Afraid => ":O", Self::Angry => ">:(", Self::Anxious => ":S",
-            Self::Disgusted => ">_<", Self::Tired => "-_ -".replace(' ', "").leak(),
+            Self::Disgusted => ">_<", Self::Tired => "-_ -",
             Self::Hungry => ":P", Self::Dirty => ":/", Self::Bored => ":|",
             Self::Urgent => "O_O", Self::Sleeping => "Zzz",
         }
