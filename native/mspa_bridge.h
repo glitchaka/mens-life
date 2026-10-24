@@ -26,6 +26,11 @@ typedef struct ml_psych_state {
     uint32_t memories;
     uint32_t beliefs;
     uint32_t learned_patterns;
+    /* sociability, stability, empathy, persistence, curiosity, boldness */
+    float personality[6];
+    /* belief rigidity, goal persistence, switch resistance, threat sensitivity,
+       social sensitivity, exploration */
+    float derived_traits[6];
 } ml_psych_state;
 
 ml_brain* ml_brain_create(uint64_t seed, char* error, size_t capacity) ML_NOEXCEPT;
