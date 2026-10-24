@@ -13,6 +13,8 @@ pub struct PsychState {
     pub memories: u32,
     pub beliefs: u32,
     pub learned_patterns: u32,
+    pub personality: [f32; 6],
+    pub derived_traits: [f32; 6],
 }
 
 #[repr(C)]
@@ -26,14 +28,10 @@ unsafe extern "C" {
     fn ml_brain_create_agent(seed: u64, agent: u64, error: *mut u8, capacity: usize) -> *mut c_void;
     fn ml_brain_destroy(brain: *mut c_void);
     fn ml_brain_update(brain: *mut c_void, ticks: u64, values: *const f32) -> i32;
-    fn ml_brain_decide(
-        brain: *mut c_void,
-        options: *const NativeOption,
-        count: usize,
-        current: i32,
-        selected: *mut i32,
-    ) -> i32;
+    fn ml_brain_decide(brain: *mut c_void, options: *const NativeOption, count: usize,
+        current: i32, selected: *mut i32) -> i32;
     fn ml_brain_event(brain: *mut c_void, task: i32, kind: i32) -> i32;
+    fn ml_brain_environment(brain: *mut c_void, kind: i32, salience: f32) -> i32;
     fn ml_brain_state(brain: *const c_void, output: *mut PsychState) -> i32;
     fn ml_brain_error(brain: *const c_void, output: *mut u8, capacity: usize);
     fn ml_brain_social_decide(brain: *mut c_void, target: u64, selected: *mut i32) -> i32;
@@ -43,14 +41,9 @@ unsafe extern "C" {
 
 #[derive(Debug)]
 struct Handle(NonNull<c_void>);
-// Each handle owns a separate runtime. Mutex prevents concurrent access from
-// Bevy's systems; the pointer is never exposed or shared with native callbacks.
 unsafe impl Send for Handle {}
 impl Drop for Handle {
-    fn drop(&mut self) {
-        // SAFETY: this is the unique owner, allocated by ml_brain_create.
-        unsafe { ml_brain_destroy(self.0.as_ptr()) };
-    }
+    fn drop(&mut self) { unsafe { ml_brain_destroy(self.0.as_ptr()) }; }
 }
 
 #[derive(Debug)]
@@ -67,21 +60,13 @@ fn error_text(buffer: &[u8]) -> String {
 }
 
 impl Psychology {
-    pub fn new(seed: u64) -> Result<Self, String> {
-        Self::new_agent(1, seed)
-    }
+    pub fn new(seed: u64) -> Result<Self, String> { Self::new_agent(1, seed) }
+
     pub fn new_agent(agent: u64, seed: u64) -> Result<Self, String> {
         let mut error = [0u8; 512];
-        // SAFETY: the buffer is writable for its advertised length. C++ catches
-        // every exception at the ABI boundary and returns an owned opaque handle.
         let pointer = unsafe { ml_brain_create_agent(seed, agent, error.as_mut_ptr(), error.len()) };
         let handle = NonNull::new(pointer).ok_or_else(|| error_text(&error))?;
-        let mut this = Self {
-            handle: Mutex::new(Handle(handle)),
-            state: PsychState::default(),
-            error: None,
-            seconds: 0.0,
-        };
+        let mut this = Self { handle: Mutex::new(Handle(handle)), state: PsychState::default(), error: None, seconds: 0.0 };
         this.read_state();
         Ok(this)
     }
@@ -93,14 +78,9 @@ impl Psychology {
     fn finish_call(&mut self, pointer: *mut c_void, status: i32) -> bool {
         if status == 0 {
             let mut buffer = [0u8; 512];
-            // SAFETY: live, exclusively borrowed runtime and writable buffer.
             unsafe { ml_brain_error(pointer, buffer.as_mut_ptr(), buffer.len()) };
             let message = error_text(&buffer);
-            self.error = Some(if message.is_empty() {
-                "MSPA no pudo procesar la operación".into()
-            } else {
-                message
-            });
+            self.error = Some(if message.is_empty() { "MSPA no pudo procesar la operación".into() } else { message });
             false
         } else {
             self.error = None;
@@ -111,7 +91,6 @@ impl Psychology {
 
     fn read_state(&mut self) {
         let pointer = self.pointer();
-        // SAFETY: C++ writes exactly the repr(C) snapshot; no C++ containers cross FFI.
         unsafe { ml_brain_state(pointer, &mut self.state) };
     }
 
@@ -120,46 +99,39 @@ impl Psychology {
         let ticks = (self.seconds * 1000.0).round() as u64;
         let needs = values.map(|value| value.clamp(0.0, 100.0) as f32);
         let pointer = self.pointer();
-        // SAFETY: needs contains five readable floats for the duration of the call.
         let status = unsafe { ml_brain_update(pointer, ticks, needs.as_ptr()) };
         self.finish_call(pointer, status);
     }
 
     pub fn decide(&mut self, available: &[(Task, f32, f32)], current: Option<Task>) -> Option<Task> {
-        let mut options: Vec<_> = available
-            .iter()
-            .map(|(task, cost, progress)| NativeOption {
-                task: task.spec().need as i32,
-                cost: *cost,
-                progress: *progress,
-            })
-            .collect();
-        // Rest is a real host action, so healthy characters need not use furniture endlessly.
+        let mut options: Vec<_> = available.iter().map(|(task, cost, progress)| NativeOption {
+            task: task.spec().need as i32, cost: *cost, progress: *progress,
+        }).collect();
         options.push(NativeOption { task: -1, cost: 0.0, progress: 0.0 });
         let pointer = self.pointer();
         let mut selected = -1;
-        // SAFETY: C++ only reads this live slice and writes one i32 selection.
         let status = unsafe {
-            ml_brain_decide(
-                pointer,
-                options.as_ptr(),
-                options.len(),
-                current.map_or(-1, |task| task.spec().need as i32),
-                &mut selected,
-            )
+            ml_brain_decide(pointer, options.as_ptr(), options.len(),
+                current.map_or(-1, |task| task.spec().need as i32), &mut selected)
         };
-        if !self.finish_call(pointer, status) {
-            return None;
-        }
-        available.iter().find_map(|(task, _, _)| {
-            (task.spec().need as i32 == selected).then_some(*task)
-        })
+        if !self.finish_call(pointer, status) { return None; }
+        available.iter().find_map(|(task, _, _)|
+            (task.spec().need as i32 == selected).then_some(*task))
     }
 
     pub fn event(&mut self, task: Task, event: ActivityEvent) {
         let pointer = self.pointer();
-        // SAFETY: task/event are closed Rust enums mapped to the documented C ABI.
         let status = unsafe { ml_brain_event(pointer, task.spec().need as i32, event as i32) };
+        self.finish_call(pointer, status);
+    }
+
+    /// Registers an anonymous environmental cue. The character is the perceiver,
+    /// never the asserted cause, so this cannot reveal a player meta-identity.
+    pub fn notice(&mut self, task: Task, salience: f32) {
+        let pointer = self.pointer();
+        let status = unsafe {
+            ml_brain_environment(pointer, task.spec().need as i32, salience.clamp(0.0, 1.0))
+        };
         self.finish_call(pointer, status);
     }
 
@@ -177,25 +149,27 @@ impl Psychology {
             Expression::Calm
         }
     }
+
     pub fn social_choice(&mut self, target: u64) -> Option<SocialKind> {
         let pointer = self.pointer();
         let mut selected = -1;
-        // SAFETY: live exclusive runtime and one writable integer.
         let status = unsafe { ml_brain_social_decide(pointer, target, &mut selected) };
         if !self.finish_call(pointer, status) { return None; }
-        match selected { 0 => Some(SocialKind::Greet), 1 => Some(SocialKind::Chat),
-            2 => Some(SocialKind::Joke), _ => None }
+        match selected {
+            0 => Some(SocialKind::Greet), 1 => Some(SocialKind::Chat),
+            2 => Some(SocialKind::Joke), _ => None,
+        }
     }
+
     pub fn social_report(&mut self, target: u64, kind: SocialKind, success: bool) {
         let pointer = self.pointer();
-        // SAFETY: IDs refer to host characters and the kind is a closed enum.
         let status = unsafe { ml_brain_social_report(pointer, target, kind as i32, i32::from(success)) };
         self.finish_call(pointer, status);
     }
+
     pub fn relationship(&mut self, target: u64) -> Relationship {
         let pointer = self.pointer();
         let mut values = [0.0; 4];
-        // SAFETY: output is exactly four writable floats, copied before return.
         unsafe { ml_brain_relation(pointer, target, values.as_mut_ptr()) };
         Relationship { affection: values[0], trust: values[1], respect: values[2], familiarity: values[3] }
     }
@@ -204,8 +178,14 @@ impl Psychology {
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SocialKind { Greet = 0, Chat = 1, Joke = 2 }
+
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Relationship { pub affection: f32, pub trust: f32, pub respect: f32, pub familiarity: f32 }
+pub struct Relationship {
+    pub affection: f32,
+    pub trust: f32,
+    pub respect: f32,
+    pub familiarity: f32,
+}
 impl Relationship {
     pub fn label(self) -> &'static str {
         if self.affection < -0.15 { "Relación tensa" }
@@ -229,11 +209,12 @@ impl Expression {
         match self {
             Self::Calm => ":-)", Self::Happy => ":D", Self::Sad => ":-(",
             Self::Afraid => ":O", Self::Angry => ">:(", Self::Anxious => ":S",
-            Self::Disgusted => ">_<", Self::Tired => "-_-", Self::Hungry => ":P",
-            Self::Dirty => ":/", Self::Bored => ":|", Self::Urgent => "O_O",
-            Self::Sleeping => "Zzz",
+            Self::Disgusted => ">_<", Self::Tired => "-_ -".replace(' ', "").leak(),
+            Self::Hungry => ":P", Self::Dirty => ":/", Self::Bored => ":|",
+            Self::Urgent => "O_O", Self::Sleeping => "Zzz",
         }
     }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Calm => "Tranquilo", Self::Happy => "Contento", Self::Sad => "Desanimado",
@@ -243,6 +224,7 @@ impl Expression {
             Self::Urgent => "¡Necesito el baño!", Self::Sleeping => "Soñando",
         }
     }
+
     pub fn words(self) -> &'static str {
         match self {
             Self::Calm => "Estoy a gusto en casa.",
@@ -260,6 +242,7 @@ impl Expression {
             Self::Sleeping => "Zzz... cinco minutitos más...",
         }
     }
+
     pub fn color(self) -> u32 {
         match self {
             Self::Happy | Self::Calm => 0x527f7e,
