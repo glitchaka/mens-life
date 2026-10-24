@@ -6,35 +6,7 @@ use serde_json::json;
 
 pub const VISUAL_ASSET: &str = "house/autumn_house.gltf#Scene0";
 
-/// Reassembles the compact FBX-derived glTF into Bevy's runtime asset root.
-/// The source is split only to keep repository text writes manageable; at
-/// runtime Bevy sees a normal single glTF file with embedded vertex data.
-pub fn prepare_asset_root() -> String {
-    const EXPECTED_BYTES: usize = 60_241;
-    let root = std::env::temp_dir().join("mens-life-assets-autumn-house-v2");
-    let folder = root.join("house");
-    let target = folder.join("autumn_house.gltf");
-    let valid = std::fs::metadata(&target)
-        .is_ok_and(|metadata| metadata.len() == EXPECTED_BYTES as u64);
-    if !valid {
-        std::fs::create_dir_all(&folder).expect("cannot create Autumn House asset cache");
-        let chunks = [
-            include_str!("../assets/house/autumn_house.gltf.part00"),
-            include_str!("../assets/house/autumn_house.gltf.part01"),
-            include_str!("../assets/house/autumn_house.gltf.part02"),
-            include_str!("../assets/house/autumn_house.gltf.part03"),
-            include_str!("../assets/house/autumn_house.gltf.part04"),
-        ];
-        let mut source = String::with_capacity(EXPECTED_BYTES);
-        for chunk in chunks {
-            source.push_str(chunk);
-        }
-        assert_eq!(source.len(), EXPECTED_BYTES, "Autumn House asset chunks are incomplete");
-        std::fs::write(&target, source).expect("cannot materialize Autumn House asset");
-    }
-    root.to_string_lossy().into_owned()
-}
-
+/// Asset generated from the supplied FBX by `build.rs` from checked-in chunks.
 fn wall(s: &mut SceneSpec, size: [f64; 3], at: [f64; 3]) {
     let id = s.box_mesh(size, at, 0xffffff, "");
     s.last()["visible"] = json!(false);
