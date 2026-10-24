@@ -10,7 +10,8 @@ fn obstacle(s: &mut SceneSpec, id: String) -> String {
 }
 
 fn last_obstacle(s: &mut SceneSpec) {
-    let id = s.objects.last()["id"].as_str().unwrap().to_owned();
+    let id = s.objects.last().expect("furniture object")["id"]
+        .as_str().expect("furniture id").to_owned();
     s.obstacles.push(id);
 }
 
