@@ -1,5 +1,4 @@
-//! Procedural native triangle meshes. Dimensions and vertex rounding follow
-//! the original room; no model files or browser renderer are needed.
+//! Native triangle meshes used by the scene, characters, interaction proxies and baked house asset.
 use crate::{
     game::{Bounds, Vec3 as Point},
     scene::SceneSpec,
@@ -18,23 +17,40 @@ pub struct Geometry {
     pub positions: Vec<[f32; 3]>,
     normals: Vec<[f32; 3]>,
     uvs: Vec<[f32; 2]>,
+    colors: Vec<[f32; 4]>,
     indices: Vec<u32>,
 }
 impl Geometry {
+    pub(crate) fn from_raw(
+        positions: Vec<[f32; 3]>,
+        normals: Vec<[f32; 3]>,
+        uvs: Vec<[f32; 2]>,
+        colors: Vec<[f32; 4]>,
+        indices: Vec<u32>,
+    ) -> Self {
+        Self { positions, normals, uvs, colors, indices }
+    }
     fn vertex(&mut self, p: DVec3, n: DVec3, uv: [f32; 2]) {
         self.positions.push(p.as_vec3().to_array());
         self.normals.push(n.as_vec3().to_array());
         self.uvs.push(uv);
     }
     pub fn mesh(self) -> Mesh {
-        Mesh::new(
+        let vertex_count = self.positions.len();
+        let mut mesh = Mesh::new(
             PrimitiveTopology::TriangleList,
             RenderAssetUsages::default(),
         )
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.positions)
         .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs)
-        .with_inserted_indices(Indices::U32(self.indices))
+        .with_inserted_indices(Indices::U32(self.indices));
+        if self.uvs.len() == vertex_count {
+            mesh = mesh.with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uvs);
+        }
+        if self.colors.len() == vertex_count {
+            mesh = mesh.with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.colors);
+        }
+        mesh
     }
 }
 fn box_mesh(size: DVec3, segments: usize, radius: f64) -> Geometry {
@@ -51,11 +67,9 @@ fn box_mesh(size: DVec3, segments: usize, radius: f64) -> Geometry {
         let base = g.positions.len() as u32;
         for y in 0..=segments {
             for x in 0..=segments {
-                let p = (normal * 0.5
+                let p = normal * 0.5
                     + u * (x as f64 / segments as f64 - 0.5)
-                    + v * (y as f64 / segments as f64 - 0.5))
-                    .as_vec3()
-                    .as_dvec3();
+                    + v * (y as f64 / segments as f64 - 0.5);
                 let (point, n) = if radius > 0.0 {
                     let sign = p.signum();
                     let n = (p - sign * (0.5 / segments as f64)).normalize();
@@ -208,38 +222,59 @@ fn loft(args: &[f64]) -> Geometry {
             let (sin, cos) = angle.sin_cos();
             let rx = profile[1].max(0.001);
             let rz = profile[2].max(0.001);
-            let n = DVec3::new(sin/rx,
-                -(sin*sin*drx/rx + cos*cos*drz/rz + cos*dcz/rz), cos/rz).normalize();
-            g.vertex(DVec3::new(sin*rx,profile[0],cos*rz+profile[3]), n,
-                [i as f32 / segments as f32, row as f32 / (rows.len()-1) as f32]);
+            let n = DVec3::new(
+                sin / rx,
+                -(sin * sin * drx / rx + cos * cos * drz / rz + cos * dcz / rz),
+                cos / rz,
+            )
+            .normalize();
+            g.vertex(
+                DVec3::new(sin * rx, profile[0], cos * rz + profile[3]),
+                n,
+                [i as f32 / segments as f32, row as f32 / (rows.len() - 1) as f32],
+            );
         }
     }
-    let stride = (segments+1) as u32;
-    for row in 0..rows.len()-1 {
+    let stride = (segments + 1) as u32;
+    for row in 0..rows.len() - 1 {
         for i in 0..segments as u32 {
-            let a = row as u32*stride+i;
-            g.indices.extend([a,a+1,a+stride+1,a,a+stride+1,a+stride]);
+            let a = row as u32 * stride + i;
+            g.indices.extend([a, a + 1, a + stride + 1, a, a + stride + 1, a + stride]);
         }
     }
-    for (row, sign) in [(0,-1.0),(rows.len()-1,1.0)] {
+    for (row, sign) in [(0, -1.0), (rows.len() - 1, 1.0)] {
         let base = g.positions.len() as u32;
-        g.vertex(DVec3::new(0.0,rows[row][0],rows[row][3]), DVec3::Y*sign,[0.5,0.5]);
+        g.vertex(
+            DVec3::new(0.0, rows[row][0], rows[row][3]),
+            DVec3::Y * sign,
+            [0.5, 0.5],
+        );
         for i in 0..segments as u32 {
-            let a = row as u32*stride+i;
-            if sign > 0.0 { g.indices.extend([base,a,a+1]); }
-            else { g.indices.extend([base,a+1,a]); }
+            let a = row as u32 * stride + i;
+            if sign > 0.0 {
+                g.indices.extend([base, a, a + 1]);
+            } else {
+                g.indices.extend([base, a + 1, a]);
+            }
         }
     }
     g
 }
 pub fn build(node: &Value) -> Geometry {
+    let kind = node["kind"].as_str().unwrap();
+    if kind == "house-lower" {
+        return crate::house_asset::lower();
+    }
+    if kind == "house-upper" {
+        return crate::house_asset::upper();
+    }
     let args: Vec<f64> = node["args"]
         .as_array()
         .unwrap()
         .iter()
         .map(|n| n.as_f64().unwrap())
         .collect();
-    match node["kind"].as_str().unwrap() {
+    match kind {
         "rounded-box" => box_mesh(
             DVec3::new(args[0], args[1], args[2]),
             args[3] as usize * 2 + 1,
@@ -264,7 +299,7 @@ pub fn build(node: &Value) -> Geometry {
         "cone" => cylinder(0.0, args[0], args[1], args[2] as usize),
         "octahedron" => octahedron(args[0]),
         "loft" => loft(&args),
-        kind => panic!("Unknown native geometry: {kind}"),
+        other => panic!("Unknown native geometry: {other}"),
     }
 }
 pub fn vector(value: &Value, fallback: [f64; 3]) -> DVec3 {
@@ -279,8 +314,7 @@ pub fn local_transform(node: &Value) -> DMat4 {
         vector(&node["position"], [0.0; 3]),
     )
 }
-/// Build navigation from the actual native vertices, retaining double precision
-/// world transforms at cell boundaries as in the reference simulation.
+/// Navigation is built only from IDs explicitly registered as collision proxies.
 pub fn navigation_bounds(spec: &SceneSpec) -> Vec<Bounds> {
     spec.objects
         .iter()
@@ -294,8 +328,6 @@ pub fn navigation_bounds(spec: &SceneSpec) -> Vec<Bounds> {
                 local_min = local_min.min(p);
                 local_max = local_max.max(p);
             }
-            // The original navigation transforms the local bounding box, which
-            // conservatively encloses rotated plant leaves and rounded meshes.
             let mut min = DVec3::splat(f64::INFINITY);
             let mut max = DVec3::splat(f64::NEG_INFINITY);
             for x in [local_min.x, local_max.x] {
