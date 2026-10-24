@@ -2,6 +2,7 @@ pub mod furnishings;
 pub mod game;
 pub mod geometry;
 pub mod house;
+pub mod house_asset;
 pub mod human;
 pub mod mspa_ui;
 pub mod perception;
