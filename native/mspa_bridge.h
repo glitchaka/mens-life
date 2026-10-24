@@ -29,6 +29,7 @@ typedef struct ml_psych_state {
 } ml_psych_state;
 
 ml_brain* ml_brain_create(uint64_t seed, char* error, size_t capacity) ML_NOEXCEPT;
+ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, char* error, size_t capacity) ML_NOEXCEPT;
 void ml_brain_destroy(ml_brain* brain) ML_NOEXCEPT;
 int32_t ml_brain_update(ml_brain* brain, uint64_t ticks, const float values[5]) ML_NOEXCEPT;
 int32_t ml_brain_decide(ml_brain* brain, const ml_option* options, size_t count,
@@ -37,6 +38,9 @@ int32_t ml_brain_decide(ml_brain* brain, const ml_option* options, size_t count,
 int32_t ml_brain_event(ml_brain* brain, int32_t task, int32_t kind) ML_NOEXCEPT;
 int32_t ml_brain_state(const ml_brain* brain, ml_psych_state* output) ML_NOEXCEPT;
 void ml_brain_error(const ml_brain* brain, char* output, size_t capacity) ML_NOEXCEPT;
+int32_t ml_brain_social_decide(ml_brain* brain, uint64_t target, int32_t* selected) ML_NOEXCEPT;
+int32_t ml_brain_social_report(ml_brain* brain, uint64_t target, int32_t kind, int32_t success) ML_NOEXCEPT;
+int32_t ml_brain_relation(const ml_brain* brain, uint64_t target, float output[4]) ML_NOEXCEPT;
 
 #ifdef __cplusplus
 }

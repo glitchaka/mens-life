@@ -192,6 +192,46 @@ fn octahedron(radius: f64) -> Geometry {
     }
     g
 }
+fn loft(args: &[f64]) -> Geometry {
+    let segments = args[0] as usize;
+    let rows: Vec<_> = args[1..].chunks_exact(4).collect();
+    let mut g = Geometry::default();
+    for (row, profile) in rows.iter().enumerate() {
+        let previous = rows[row.saturating_sub(1)];
+        let next = rows[(row + 1).min(rows.len() - 1)];
+        let dy = (next[0] - previous[0]).max(0.00001);
+        let drx = (next[1] - previous[1]) / dy;
+        let drz = (next[2] - previous[2]) / dy;
+        let dcz = (next[3] - previous[3]) / dy;
+        for i in 0..=segments {
+            let angle = i as f64 / segments as f64 * TAU;
+            let (sin, cos) = angle.sin_cos();
+            let rx = profile[1].max(0.001);
+            let rz = profile[2].max(0.001);
+            let n = DVec3::new(sin/rx,
+                -(sin*sin*drx/rx + cos*cos*drz/rz + cos*dcz/rz), cos/rz).normalize();
+            g.vertex(DVec3::new(sin*rx,profile[0],cos*rz+profile[3]), n,
+                [i as f32 / segments as f32, row as f32 / (rows.len()-1) as f32]);
+        }
+    }
+    let stride = (segments+1) as u32;
+    for row in 0..rows.len()-1 {
+        for i in 0..segments as u32 {
+            let a = row as u32*stride+i;
+            g.indices.extend([a,a+1,a+stride+1,a,a+stride+1,a+stride]);
+        }
+    }
+    for (row, sign) in [(0,-1.0),(rows.len()-1,1.0)] {
+        let base = g.positions.len() as u32;
+        g.vertex(DVec3::new(0.0,rows[row][0],rows[row][3]), DVec3::Y*sign,[0.5,0.5]);
+        for i in 0..segments as u32 {
+            let a = row as u32*stride+i;
+            if sign > 0.0 { g.indices.extend([base,a,a+1]); }
+            else { g.indices.extend([base,a+1,a]); }
+        }
+    }
+    g
+}
 pub fn build(node: &Value) -> Geometry {
     let args: Vec<f64> = node["args"]
         .as_array()
@@ -223,6 +263,7 @@ pub fn build(node: &Value) -> Geometry {
         "cylinder" => cylinder(args[0], args[1], args[2], args[3] as usize),
         "cone" => cylinder(0.0, args[0], args[1], args[2] as usize),
         "octahedron" => octahedron(args[0]),
+        "loft" => loft(&args),
         kind => panic!("Unknown native geometry: {kind}"),
     }
 }

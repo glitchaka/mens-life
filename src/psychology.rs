@@ -23,7 +23,7 @@ struct NativeOption {
 }
 
 unsafe extern "C" {
-    fn ml_brain_create(seed: u64, error: *mut u8, capacity: usize) -> *mut c_void;
+    fn ml_brain_create_agent(seed: u64, agent: u64, error: *mut u8, capacity: usize) -> *mut c_void;
     fn ml_brain_destroy(brain: *mut c_void);
     fn ml_brain_update(brain: *mut c_void, ticks: u64, values: *const f32) -> i32;
     fn ml_brain_decide(
@@ -36,6 +36,9 @@ unsafe extern "C" {
     fn ml_brain_event(brain: *mut c_void, task: i32, kind: i32) -> i32;
     fn ml_brain_state(brain: *const c_void, output: *mut PsychState) -> i32;
     fn ml_brain_error(brain: *const c_void, output: *mut u8, capacity: usize);
+    fn ml_brain_social_decide(brain: *mut c_void, target: u64, selected: *mut i32) -> i32;
+    fn ml_brain_social_report(brain: *mut c_void, target: u64, kind: i32, success: i32) -> i32;
+    fn ml_brain_relation(brain: *const c_void, target: u64, output: *mut f32) -> i32;
 }
 
 #[derive(Debug)]
@@ -65,10 +68,13 @@ fn error_text(buffer: &[u8]) -> String {
 
 impl Psychology {
     pub fn new(seed: u64) -> Result<Self, String> {
+        Self::new_agent(1, seed)
+    }
+    pub fn new_agent(agent: u64, seed: u64) -> Result<Self, String> {
         let mut error = [0u8; 512];
         // SAFETY: the buffer is writable for its advertised length. C++ catches
         // every exception at the ABI boundary and returns an owned opaque handle.
-        let pointer = unsafe { ml_brain_create(seed, error.as_mut_ptr(), error.len()) };
+        let pointer = unsafe { ml_brain_create_agent(seed, agent, error.as_mut_ptr(), error.len()) };
         let handle = NonNull::new(pointer).ok_or_else(|| error_text(&error))?;
         let mut this = Self {
             handle: Mutex::new(Handle(handle)),
@@ -170,6 +176,42 @@ impl Psychology {
         } else {
             Expression::Calm
         }
+    }
+    pub fn social_choice(&mut self, target: u64) -> Option<SocialKind> {
+        let pointer = self.pointer();
+        let mut selected = -1;
+        // SAFETY: live exclusive runtime and one writable integer.
+        let status = unsafe { ml_brain_social_decide(pointer, target, &mut selected) };
+        if !self.finish_call(pointer, status) { return None; }
+        match selected { 0 => Some(SocialKind::Greet), 1 => Some(SocialKind::Chat),
+            2 => Some(SocialKind::Joke), _ => None }
+    }
+    pub fn social_report(&mut self, target: u64, kind: SocialKind, success: bool) {
+        let pointer = self.pointer();
+        // SAFETY: IDs refer to host characters and the kind is a closed enum.
+        let status = unsafe { ml_brain_social_report(pointer, target, kind as i32, i32::from(success)) };
+        self.finish_call(pointer, status);
+    }
+    pub fn relationship(&mut self, target: u64) -> Relationship {
+        let pointer = self.pointer();
+        let mut values = [0.0; 4];
+        // SAFETY: output is exactly four writable floats, copied before return.
+        unsafe { ml_brain_relation(pointer, target, values.as_mut_ptr()) };
+        Relationship { affection: values[0], trust: values[1], respect: values[2], familiarity: values[3] }
+    }
+}
+
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SocialKind { Greet = 0, Chat = 1, Joke = 2 }
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Relationship { pub affection: f32, pub trust: f32, pub respect: f32, pub familiarity: f32 }
+impl Relationship {
+    pub fn label(self) -> &'static str {
+        if self.affection < -0.15 { "Relación tensa" }
+        else if self.familiarity >= 0.6 && self.affection >= 0.2 { "Amistad" }
+        else if self.familiarity >= 0.2 { "Buena compañía" }
+        else { "Se están conociendo" }
     }
 }
 

@@ -50,8 +50,9 @@ fn completing_a_physical_activity_produces_relief_and_interruption_is_not_failur
     let mut game = game();
     game.values = [90.0, 40.0, 90.0, 90.0, 90.0];
     game.frame.position = Task::Eat.spec().approach;
+    game.ground_position = game.frame.position;
     game.command(Task::Eat);
-    for i in 0..205 { game.tick(0.05, i as f64 * 50.0); }
+    for i in 0..225 { game.tick(0.05, i as f64 * 50.0); }
     assert_eq!(game.phase, Phase::Idle);
     assert!(game.values[1] > 75.0);
     assert!(game.reaction.words.contains("hambre"));

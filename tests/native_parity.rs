@@ -1,5 +1,4 @@
-//! The original navigation is preserved; autonomous choices now belong to MSPA.
-//! UI controls and the physical navigation reference stay independently covered.
+//! Native controls and collision-safe access to the furnished room.
 use bevy_egui::egui;
 use mens_life::{
     game::{Game, Navigation, Task},
@@ -7,17 +6,19 @@ use mens_life::{
     scene::{self, Avatar},
     ui,
 };
-use serde_json::Value;
 
 #[test]
-fn native_meshes_preserve_reference_navigation() {
-    let reference: Value =
-        serde_json::from_str(include_str!("reference/native-replay.json")).unwrap();
-    let random: Vec<f64> = serde_json::from_value(reference["random"].clone()).unwrap();
-    let spec = scene::build(&Avatar::default(), &random);
+fn all_furniture_has_a_reachable_collision_safe_approach() {
+    let spec = scene::build(&Avatar::default(), &[0.5;90]);
     let navigation = Navigation::new(geometry::navigation_bounds(&spec));
-    for (index, free) in navigation.free.iter().enumerate() {
-        assert_eq!(Some(*free), reference["free"][index].as_bool(), "cell {index}");
+    let origin = mens_life::game::Vec3::new(0.0,0.0,2.0);
+    for task in [Task::Bed,Task::Tv,Task::Eat,Task::Shower,Task::Toilet] {
+        let mut previous=origin;
+        let path=navigation.route(origin,task.spec().approach).expect("furniture is reachable");
+        for next in path {
+            assert!(navigation.segment_free(previous,next),"{task:?} cuts a corner");
+            previous=next;
+        }
     }
 }
 

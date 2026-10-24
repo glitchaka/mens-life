@@ -15,6 +15,7 @@ use mens_life::{
     game::{Game, Navigation, Task, Vec3 as Point},
     geometry,
     scene::{self, Avatar},
+    society::Society,
     ui,
 };
 use serde_json::Value;
@@ -24,6 +25,7 @@ use std::collections::HashMap;
 struct Life {
     game: Game,
     avatar: Avatar,
+    society: Society,
     changed: bool,
     random: Vec<f64>,
 }
@@ -31,6 +33,8 @@ struct Life {
 struct NodeId(String);
 #[derive(Component)]
 struct Furniture(Task);
+#[derive(Component)]
+struct Person(u64);
 #[derive(Resource, Default)]
 struct Materials(HashMap<String, Handle<StandardMaterial>>);
 #[derive(Resource, Default)]
@@ -116,10 +120,12 @@ pub fn run() {
         Navigation::new(geometry::navigation_bounds(&spec)),
         spec.drops_y,
     );
+    let society = Society::new(&game.navigation);
     App::new()
         .insert_resource(Life {
             game,
             avatar,
+            society,
             changed: false,
             random,
         })
@@ -183,6 +189,7 @@ fn setup(
             Visibility::Inherited
         };
         let mut entity = commands.spawn((NodeId(id.into()), transform, visibility));
+        if let Some(actor) = node["actor"].as_u64() { entity.insert(Person(actor)); }
         if node["kind"] != "group" {
             let mat = if let Some(id) = node["material_ref"].as_str() {
                 shared.0[id].clone()
@@ -281,6 +288,8 @@ fn setup(
     }
     for i in 0..capture.simulate {
         life.game.tick(0.05, i as f64 * 50.0);
+        let Life { game, society, .. } = &mut *life;
+        society.tick(game, 0.05);
     }
 }
 fn interface(
@@ -293,14 +302,16 @@ fn interface(
         game,
         avatar,
         changed,
+        society,
         ..
     } = &mut *life;
     *changed |= ui::draw(ctx, game, avatar).avatar_changed;
+    ui::draw_social(ctx, game, society);
     let frame = &game.frame;
     let rotation = Quat::from_euler(EulerRot::XYZ,
         frame.rotation[0] as f32, frame.rotation[1] as f32, frame.rotation[2] as f32);
     let head = Vec3::new(frame.position.x as f32, frame.position.y as f32, frame.position.z as f32)
-        + rotation * Vec3::new(0.0, 2.35, 0.0) + Vec3::Y * 0.5;
+        + rotation * Vec3::new(0.0, 1.76, 0.0) + Vec3::Y * 0.4;
     let (camera, transform) = *camera;
     if let Ok(position) = camera.world_to_viewport(transform, head) {
         let size = camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);
@@ -309,6 +320,20 @@ fn interface(
             screen.left() + position.x * screen.width() / size.x,
             screen.top() + position.y * screen.height() / size.y,
         ]);
+    }
+    if !game.creator {
+        let size = camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);
+        let screen = ctx.content_rect();
+        for resident in &society.residents {
+            let p = resident.frame.position;
+            let head = Vec3::new(p.x as f32, p.y as f32 + 2.05, p.z as f32);
+            if let Ok(position) = camera.world_to_viewport(transform, head) {
+                ui::draw_resident(ctx, resident, [
+                    screen.left()+position.x*screen.width()/size.x,
+                    screen.top()+position.y*screen.height()/size.y,
+                ]);
+            }
+        }
     }
     Ok(())
 }
@@ -323,7 +348,7 @@ fn avatar_changed(
     shared: Res<Materials>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut nodes: Query<(&NodeId, &mut Mesh3d, &mut Transform)>,
+    mut nodes: Query<(&NodeId, Option<&mut Mesh3d>, &mut Transform)>,
 ) {
     if !life.changed {
         return;
@@ -335,10 +360,10 @@ fn avatar_changed(
             *mat = material(v);
         }
     }
-    for (id, mut mesh, mut transform) in &mut nodes {
-        if id.0 == "torso" {
-            let node = spec.objects.iter().find(|n| n["id"] == "torso").unwrap();
-            mesh.0 = meshes.add(geometry::build(node).mesh());
+    for (id, mesh, mut transform) in &mut nodes {
+        if let Some(node) = spec.objects.iter().find(|n| n["id"] == id.0 && n["actor"] == 1) {
+            if let Some(mut mesh) = mesh { mesh.0 = meshes.add(geometry::build(node).mesh()); }
+            transform.translation = geometry::vector(&node["position"], [0.0;3]).as_vec3();
             transform.scale = geometry::vector(&node["scale"], [1.0; 3]).as_vec3();
         }
     }
@@ -360,8 +385,10 @@ fn advance(
     }
     // Captures preserve the requested state while the GPU warms its pipelines.
     if capture.path.is_none() {
-        life.game
-            .tick(time.delta_secs_f64(), time.elapsed_secs_f64() * 1000.0);
+        let dt = time.delta_secs_f64();
+        life.game.tick(dt, time.elapsed_secs_f64() * 1000.0);
+        let Life { game, society, .. } = &mut *life;
+        society.tick(game, dt);
     }
 }
 fn animate(
@@ -370,9 +397,14 @@ fn animate(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut nodes: Query<(&NodeId, &mut Transform, &mut Visibility)>,
 ) {
-    let f = &life.game.frame;
     for (id, mut t, mut v) in &mut nodes {
-        match id.0.as_str() {
+        let (actor, part) = if let Some(rest) = id.0.strip_prefix("npc-") {
+            let (actor,part) = rest.split_once('/').unwrap();
+            (actor.parse::<u64>().unwrap(),part)
+        } else { (1,id.0.as_str()) };
+        let f = if actor == 1 { &life.game.frame }
+            else { &life.society.residents.iter().find(|r| r.id == actor).unwrap().frame };
+        match part {
             "person" => {
                 t.translation = Vec3::new(
                     f.position.x as f32,
@@ -388,8 +420,22 @@ fn animate(
             }
             "leg-0" => t.rotation = Quat::from_rotation_x(f.legs[0] as f32),
             "leg-1" => t.rotation = Quat::from_rotation_x(f.legs[1] as f32),
-            "arm-0" => t.rotation = Quat::from_rotation_x(f.arms[0] as f32),
-            "arm-1" => t.rotation = Quat::from_rotation_x(f.arms[1] as f32),
+            "knee-0" => t.rotation = Quat::from_rotation_x(f.knees[0] as f32),
+            "knee-1" => t.rotation = Quat::from_rotation_x(f.knees[1] as f32),
+            "arm-0" => t.rotation = Quat::from_euler(EulerRot::XYZ,f.arms[0] as f32,0.0,-0.06),
+            "arm-1" => t.rotation = Quat::from_euler(EulerRot::XYZ,f.arms[1] as f32,0.0,0.06),
+            "forearm-0" => t.rotation = Quat::from_rotation_x(-f.elbows[0] as f32),
+            "forearm-1" => t.rotation = Quat::from_rotation_x(-f.elbows[1] as f32),
+            "spine" => {
+                t.translation.y = 0.94 + f.breath as f32;
+                t.rotation = Quat::from_euler(EulerRot::XYZ,f.spine[0] as f32,f.spine[1] as f32,f.spine[2] as f32);
+            }
+            "head-bone" => t.rotation = Quat::from_euler(EulerRot::XYZ,f.head[0] as f32,f.head[1] as f32,0.0),
+            "eye-white-0" | "eye-white-1" | "eye-0" | "eye-1" => {
+                let clock = (life.game.game_time * 0.8 + actor as f64).rem_euclid(4.8);
+                let blink = if clock < 0.14 { 0.12 } else { 1.0 };
+                t.scale.y = (if part.starts_with("eye-white") { 0.006 } else { 0.005 }) * blink;
+            }
             "plumb" => {
                 *v = if f.plumb {
                     Visibility::Inherited
@@ -411,6 +457,7 @@ fn animate(
             _ => {}
         }
     }
+    let f = &life.game.frame;
     if let Some(mat) = shared.0.get("tv-screen").and_then(|h| materials.get_mut(h)) {
         mat.base_color = rgb(if f.watching { 0x79a7d3 } else { 0x17212b });
         mat.emissive = Color::hsl(
@@ -463,6 +510,7 @@ fn pick(
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     furniture: Query<(&Furniture, &Mesh3d, &GlobalTransform)>,
+    people: Query<(&Person, &Mesh3d, &GlobalTransform)>,
     meshes: Res<Assets<Mesh>>,
     mut life: ResMut<Life>,
 ) {
@@ -481,6 +529,18 @@ fn pick(
     let Ok(ray) = camera.0.viewport_to_world(camera.1, cursor) else {
         return;
     };
+    let mut person_hit = None;
+    let mut person_distance = f32::INFINITY;
+    for (person,handle,transform) in &people {
+        if person.0 == 1 { continue; }
+        let Some(mesh) = meshes.get(&handle.0) else { continue; };
+        let inverse = transform.affine().inverse();
+        if let Some(t) = intersection(mesh,inverse.transform_point3(ray.origin),inverse.transform_vector3(*ray.direction))
+            && t < person_distance {
+            person_distance = t;
+            person_hit = Some(person.0);
+        }
+    }
     let mut hit = None;
     let mut closest = f32::INFINITY;
     for (f, handle, transform) in &furniture {
@@ -497,6 +557,10 @@ fn pick(
             closest = t;
             hit = Some(f.0);
         }
+    }
+    if let Some(actor) = person_hit && person_distance < closest {
+        life.society.selected = Some(actor);
+        return;
     }
     if let Some(task) = hit {
         life.game.command(task);

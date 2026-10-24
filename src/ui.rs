@@ -2,7 +2,9 @@
 use crate::{
     game::{Game, Task},
     psychology::Expression,
+    psychology::SocialKind,
     scene::Avatar,
+    society::{Resident, Society},
 };
 use bevy_egui::egui::{
     self, Align2, Color32, CornerRadius, FontId, Id, Order, Pos2, Rect, Sense, Stroke, StrokeKind,
@@ -164,6 +166,64 @@ pub fn draw_reaction(ctx: &egui::Context, game: &Game, anchor: [f32; 2]) {
     text(&p, rect.min + vec2(58.0, 11.0), Align2::LEFT_TOP, expression.label(), 12.0, expression.color());
     let words = p.layout(game.reaction.words.clone(), FontId::proportional(13.0), color(INK), width - 71.0);
     p.galley(rect.min + vec2(58.0, 31.0), words, color(INK));
+}
+
+pub fn draw_resident(ctx: &egui::Context, resident: &Resident, anchor: [f32;2]) {
+    let screen = ctx.content_rect();
+    let speaking = resident.reaction.remaining > 0.0;
+    let size = if speaking { vec2(220.0,82.0) } else { vec2(100.0,25.0) };
+    let left = (anchor[0]-size.x*0.5).clamp(8.0,(screen.right()-size.x-8.0).max(8.0));
+    let top = (anchor[1]-size.y-12.0).clamp(94.0,(screen.bottom()-size.y-100.0).max(94.0));
+    let rect = Rect::from_min_size(pos2(left,top),size);
+    let p = ctx.layer_painter(egui::LayerId::new(Order::Middle,Id::new(("resident-speech",resident.id))));
+    p.rect_filled(rect,12,color(0xfffdf5));
+    if speaking {
+        emoticon(&p,rect.min+vec2(23.0,25.0),13.0,resident.reaction.expression);
+        text(&p,rect.min+vec2(45.0,14.0),Align2::LEFT_TOP,&resident.avatar.name,12.0,0x527f7e);
+        let galley=p.layout(resident.reaction.words.clone(),FontId::proportional(12.0),color(INK),size.x-24.0);
+        p.galley(rect.min+vec2(12.0,43.0),galley,color(INK));
+    } else {
+        text(&p,rect.center(),Align2::CENTER_CENTER,&resident.avatar.name,11.0,INK);
+    }
+}
+
+pub fn draw_social(ctx: &egui::Context, game: &mut Game, society: &mut Society) {
+    if game.creator { return; }
+    let screen=ctx.content_rect();
+    let width=240.0;
+    let position=pos2((screen.right()-width-18.0).max(10.0),104.0);
+    let residents: Vec<_>=society.residents.iter().map(|r|
+        (r.id,r.avatar.name.clone(),r.relationship,r.action.clone(),r.reaction.expression)).collect();
+    egui::Area::new(Id::new("residents"))
+        .fixed_pos(position).order(Order::Middle).movable(false)
+        .show(ctx,|ui| {
+            if game.paused { ui.disable(); }
+            let rect=Rect::from_min_size(position,vec2(width,66.0+residents.len() as f32*101.0));
+            ui.set_min_size(rect.size());
+            panel(ui.painter(),rect,18,0xf8f6ed,237);
+            text(ui.painter(),position+vec2(15.0,14.0),Align2::LEFT_TOP,"EN CASA",13.0,INK);
+            for (index,(id,name,relationship,action,expression)) in residents.into_iter().enumerate() {
+                let origin=position+vec2(12.0,39.0+index as f32*101.0);
+                let selected=society.selected==Some(id);
+                ui.painter().rect_filled(Rect::from_min_size(origin,vec2(width-24.0,93.0)),11,
+                    color(if selected {0xe2ebe4} else {0xefeee5}));
+                emoticon(ui.painter(),origin+vec2(20.0,23.0),12.0,expression);
+                text(ui.painter(),origin+vec2(40.0,8.0),Align2::LEFT_TOP,&name,13.0,INK);
+                text(ui.painter(),origin+vec2(40.0,27.0),Align2::LEFT_TOP,relationship.label(),10.0,0x527f7e);
+                let response=ui.interact(Rect::from_min_size(origin,vec2(216.0,46.0)),Id::new(("select-person",id)),Sense::click());
+                response.clone().on_hover_text(format!("{}\nConfianza: {:.0}% · Familiaridad: {:.0}%",action,
+                    relationship.trust*100.0,relationship.familiarity*100.0));
+                if response.clicked() { society.selected=Some(id); }
+                for (i,(kind,label)) in [(SocialKind::Greet,"Saludar"),(SocialKind::Chat,"Hablar"),(SocialKind::Joke,"Broma")].into_iter().enumerate() {
+                    let r=Rect::from_min_size(origin+vec2(7.0+i as f32*69.0,57.0),vec2(64.0,27.0));
+                    if button(ui,r,&format!("social-{id}-{i}"),label,10.0,0xd5e1d9) {
+                        society.request(id,kind,game);
+                    }
+                }
+            }
+            let status=ui.painter().layout(society.status.clone(),FontId::proportional(10.0),color(0x718083),width-26.0);
+            ui.painter().galley(pos2(position.x+13.0,rect.bottom()-23.0),status,color(0x718083));
+        });
 }
 
 pub fn draw(ctx: &egui::Context, game: &mut Game, avatar: &mut Avatar) -> UiOutcome {

@@ -43,21 +43,7 @@ pub struct Navigation {
     pub free: Vec<bool>,
 }
 impl Navigation {
-    pub fn new(mut bounds: Vec<Bounds>) -> Self {
-        bounds.extend([
-            Bounds {
-                min: Vec3::new(-6.8, 0.0, 1.075),
-                max: Vec3::new(-1.7, 2.0, 4.325),
-            },
-            Bounds {
-                min: Vec3::new(-3.8, 0.0, -5.2),
-                max: Vec3::new(-2.7, 2.0, -3.58),
-            },
-            Bounds {
-                min: Vec3::new(-4.74, 0.0, -5.1),
-                max: Vec3::new(-4.62, 3.0, -3.3),
-            },
-        ]);
+    pub fn new(bounds: Vec<Bounds>) -> Self {
         let mut result = Self {
             bounds,
             free: Vec::new(),
@@ -103,6 +89,11 @@ impl Navigation {
     pub fn route(&self, from: Vec3, to: Vec3) -> Option<VecDeque<Vec3>> {
         let start = self.nearest(from)?;
         let end = self.nearest(to)?;
+        // The connector to the first grid cell is part of the route. Skipping
+        // it used to cut diagonally through bathroom corners from an off-grid pose.
+        if self.blocked(to.x, to.z) || !self.segment_free(from, Self::point(start)) {
+            return None;
+        }
         let mut prev = vec![None; self.free.len()];
         let mut queue = VecDeque::from([start]);
         prev[start] = Some(start);
@@ -121,6 +112,7 @@ impl Navigation {
                     || !self.free[n]
                     || prev[n].is_some()
                     || (n % WIDTH).abs_diff(i % WIDTH) > 1
+                    || !self.segment_free(Self::point(i), Self::point(n))
                 {
                     continue;
                 }
@@ -134,7 +126,18 @@ impl Navigation {
             result.push_front(Self::point(i));
             i = prev[i]?;
         }
+        if (from.x - Self::point(start).x).hypot(from.z - Self::point(start).z) > 0.001 {
+            result.push_front(Self::point(start));
+        }
         Some(result)
+    }
+    pub fn segment_free(&self, from: Vec3, to: Vec3) -> bool {
+        let distance = (from.x - to.x).hypot(from.z - to.z);
+        let steps = (distance / 0.04).ceil().max(1.0) as usize;
+        (0..=steps).all(|i| {
+            let p = Vec3::lerp(from, to, i as f64 / steps as f64);
+            !self.blocked(p.x, p.z)
+        })
     }
 }
 
@@ -170,40 +173,40 @@ impl Task {
     pub fn spec(self) -> Spec {
         match self {
             Self::Bed => Spec {
-                approach: Vec3::new(-4.3, 0.0, 0.4),
-                pose: Vec3::new(-4.3, 1.5, 1.25),
+                approach: Vec3::new(-2.8, 0.0, 2.2),
+                pose: Vec3::new(-4.6, 1.20, 2.1),
                 need: 0,
                 label: "Durmiendo",
                 going: "Yendo a la cama",
                 duration: 18.0,
             },
             Self::Tv => Spec {
-                approach: Vec3::new(0.65, 0.0, 3.2),
-                pose: Vec3::new(1.9, 0.55, 3.12),
+                approach: Vec3::new(2.2, 0.0, 1.9),
+                pose: Vec3::new(2.6, -0.36, 3.12),
                 need: 3,
                 label: "Viendo televisión",
                 going: "Yendo a ver televisión",
                 duration: 16.0,
             },
             Self::Shower => Spec {
-                approach: Vec3::new(-5.5, 0.0, -3.0),
-                pose: Vec3::new(-5.7, 0.23, -4.1),
+                approach: Vec3::new(-5.9, 0.0, -2.8),
+                pose: Vec3::new(-5.9, 0.22, -4.1),
                 need: 2,
                 label: "Duchándose",
                 going: "Yendo a la ducha",
                 duration: 12.0,
             },
             Self::Toilet => Spec {
-                approach: Vec3::new(-4.25, 0.0, -3.1),
-                pose: Vec3::new(-3.25, 0.25, -4.05),
+                approach: Vec3::new(-3.8, 0.0, -3.3),
+                pose: Vec3::new(-3.65, -0.32, -4.2),
                 need: 4,
                 label: "Usando el baño",
-                going: "Yendo a el baño",
+                going: "Yendo al baño",
                 duration: 9.0,
             },
             Self::Eat => Spec {
-                approach: Vec3::new(1.3, 0.0, -2.0),
-                pose: Vec3::new(1.3, 0.0, -2.0),
+                approach: Vec3::new(3.05, 0.0, -1.05),
+                pose: Vec3::new(3.05, 0.0, -1.05),
                 need: 1,
                 label: "Comiendo",
                 going: "Yendo a comer",
@@ -226,6 +229,7 @@ pub enum Phase {
     Idle,
     Walking,
     Using,
+    Exiting,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -234,6 +238,11 @@ pub struct Frame {
     pub rotation: [f64; 3],
     pub legs: [f64; 2],
     pub arms: [f64; 2],
+    pub knees: [f64; 2],
+    pub elbows: [f64; 2],
+    pub spine: [f64; 3],
+    pub head: [f64; 2],
+    pub breath: f64,
     pub plumb: bool,
     pub drops: bool,
     pub watching: bool,
@@ -246,10 +255,37 @@ impl Default for Frame {
             rotation: [0.0; 3],
             legs: [0.0; 2],
             arms: [0.0; 2],
+            knees: [0.04; 2],
+            elbows: [0.12; 2],
+            spine: [0.0; 3],
+            head: [0.0; 2],
+            breath: 0.0,
             plumb: true,
             drops: false,
             watching: false,
             screen_hue: 0.0,
+        }
+    }
+}
+impl Frame {
+    pub fn gait(&mut self, time: f64, moving: bool) {
+        self.breath = (time * 1.8).sin() * 0.003;
+        if moving {
+            let stride = time * 7.2;
+            for i in 0..2 {
+                let wave = (stride + i as f64 * PI).sin();
+                self.legs[i] = wave * 0.38;
+                self.knees[i] = wave.max(0.0) * 0.65 + 0.05;
+                self.arms[i] = -wave * 0.23;
+                self.elbows[i] = 0.16 + wave.abs() * 0.1;
+            }
+            self.spine = [0.02, stride.sin() * 0.035, (stride * 0.5).sin() * 0.015];
+        } else {
+            self.legs = [0.0; 2];
+            self.knees = [0.04; 2];
+            self.arms = [-0.03; 2];
+            self.elbows = [0.12; 2];
+            self.spine = [0.0; 3];
         }
     }
 }
@@ -276,14 +312,23 @@ pub struct Game {
     pub drops_y: Vec<f64>,
     pub psychology: Psychology,
     pub reaction: Reaction,
+    /// Navigation never reads the animated bed/toilet/shower pose.
+    pub ground_position: Vec3,
+    pub talking: bool,
+    pub order_serial: u64,
     manual_order: bool,
     reconsider_in: f64,
     activity_start: f64,
     blocked_until: [f64; 5],
     simulation_time: f64,
+    walking_for: f64,
+    entry_position: Vec3,
+    exit_pose: Frame,
 }
 impl Game {
     pub fn new(navigation: Navigation, drops_y: Vec<f64>) -> Self {
+        let position = navigation.nearest(Frame::default().position)
+            .map(Navigation::point).unwrap_or(Frame::default().position);
         Self {
             navigation,
             values: INITIAL,
@@ -301,45 +346,51 @@ impl Game {
             needs_visible: 4,
             displayed_values: INITIAL,
             displayed_clock: "09:42".into(),
-            frame: Frame::default(),
+            frame: Frame { position, ..Frame::default() },
             drops_y,
             psychology: Psychology::new(0x4d454e535f4c4946)
                 .expect("No se pudo iniciar MSPA-Lib para el personaje"),
             reaction: Reaction::default(),
+            ground_position: position,
+            talking: false,
+            order_serial: 0,
             manual_order: false,
             reconsider_in: 2.0,
             activity_start: 0.0,
             blocked_until: [0.0; 5],
             simulation_time: 0.0,
+            walking_for: 0.0,
+            entry_position: position,
+            exit_pose: Frame::default(),
         }
     }
     pub fn restore(&mut self) {
-        if self.phase == Phase::Using
-            && let Some(task) = self.task
-            && let Some(i) = self.navigation.nearest(task.spec().approach)
-        {
-            self.frame.position = Navigation::point(i);
-        }
+        self.frame.position = self.ground_position;
         self.frame.rotation = [0.0; 3];
         self.frame.position.y = 0.0;
         self.frame.legs = [0.0; 2];
         self.frame.arms = [0.0; 2];
+        self.frame.knees = [0.04; 2];
+        self.frame.elbows = [0.12; 2];
+        self.frame.spine = [0.0; 3];
         self.frame.plumb = true;
     }
     pub fn command(&mut self, task: Task) {
         self.begin_task(task, true);
     }
     fn interrupt(&mut self) {
-        if let Some(task) = self.task {
+        if self.phase != Phase::Exiting && let Some(task) = self.task {
             self.psychology.event(task, ActivityEvent::Interrupted);
         }
     }
     fn begin_task(&mut self, task: Task, manual: bool) {
+        if manual { self.order_serial = self.order_serial.wrapping_add(1); }
+        self.talking = false;
         self.interrupt();
         self.restore();
         let Some(next) = self
             .navigation
-            .route(self.frame.position, task.spec().approach)
+            .route(self.ground_position, task.spec().approach)
         else {
             self.path.clear();
             self.phase = Phase::Idle;
@@ -355,6 +406,7 @@ impl Game {
         self.path = next;
         self.phase = Phase::Walking;
         self.elapsed = 0.0;
+        self.walking_for = 0.0;
         self.action = task.spec().going.into();
         self.manual_order = manual;
         self.reconsider_in = 2.0;
@@ -372,30 +424,25 @@ impl Game {
         if self.creator || self.paused || self.navigation.blocked(point.x, point.z) {
             return;
         }
-        let from = if self.phase == Phase::Using {
-            self.task.map_or(self.frame.position, |task| task.spec().approach)
-        } else {
-            self.frame.position
-        };
+        let from = self.ground_position;
         if let Some(next) = self.navigation.route(from, point) {
+            self.order_serial = self.order_serial.wrapping_add(1);
             self.interrupt();
             self.restore();
+            self.talking = false;
             self.path = next;
             self.task = None;
             self.phase = Phase::Walking;
             self.action = "Caminando".into();
             self.manual_order = true;
+            self.walking_for = 0.0;
             self.say("Voy para allá.");
         } else {
             self.say("No encuentro un camino hasta allí.");
         }
     }
     fn consider(&mut self) {
-        let from = if self.phase == Phase::Using {
-            self.task.map_or(self.frame.position, |task| task.spec().approach)
-        } else {
-            self.frame.position
-        };
+        let from = self.ground_position;
         let mut available = Vec::new();
         for task in [Task::Bed, Task::Eat, Task::Shower, Task::Tv, Task::Toilet] {
             let spec = task.spec();
@@ -430,7 +477,7 @@ impl Game {
         }
         self.psychology.emotion()
     }
-    fn say(&mut self, words: &str) {
+    pub fn say(&mut self, words: &str) {
         self.reaction = Reaction {
             expression: self.expression(),
             words: words.into(),
@@ -462,12 +509,12 @@ impl Game {
             *value = (*value - dt * DECAY[i]).max(0.0);
         }
         self.psychology.advance(dt, self.values);
-        if self.phase == Phase::Idle {
+        if self.phase == Phase::Idle && !self.talking {
             self.decision_in -= dt;
             if self.decision_in <= 0.0 {
                 self.consider();
             }
-        } else if !self.manual_order && self.task.is_some() {
+        } else if self.phase != Phase::Exiting && !self.manual_order && self.task.is_some() {
             self.reconsider_in -= dt;
             if self.reconsider_in <= 0.0 {
                 self.reconsider_in = 2.0;
@@ -475,19 +522,21 @@ impl Game {
             }
         }
         if self.phase == Phase::Walking {
+            self.walking_for += dt;
             if let Some(point) = self.path.front().copied() {
-                let dx = point.x - self.frame.position.x;
-                let dz = point.z - self.frame.position.z;
+                let dx = point.x - self.ground_position.x;
+                let dz = point.z - self.ground_position.z;
                 let distance = (dx * dx + dz * dz).sqrt();
                 let movement = distance.min(dt * 1.65);
                 if distance < 0.02 {
+                    self.ground_position = point;
                     self.path.pop_front();
                 } else {
-                    let x = self.frame.position.x + dx * (movement / distance);
-                    let z = self.frame.position.z + dz * (movement / distance);
-                    if !self.navigation.blocked(x, z) {
-                        self.frame.position.x = x;
-                        self.frame.position.z = z;
+                    let x = self.ground_position.x + dx * (movement / distance);
+                    let z = self.ground_position.z + dz * (movement / distance);
+                    let next = Vec3::new(x, 0.0, z);
+                    if self.walking_for <= 45.0 && self.navigation.segment_free(self.ground_position, next) {
+                        self.ground_position = next;
                         self.frame.rotation[1] = dx.atan2(dz);
                     } else {
                         if let Some(task) = self.task {
@@ -502,14 +551,15 @@ impl Game {
                         self.say("Vaya, no puedo pasar por aquí.");
                     }
                 }
-                self.walk_time += dt * 8.0;
-                self.frame.legs = [self.walk_time.sin() * 0.45, -self.walk_time.sin() * 0.45];
-                self.frame.arms = [-self.walk_time.sin() * 0.35, self.walk_time.sin() * 0.35];
+                self.frame.position = self.ground_position;
+                self.walk_time += dt;
+                self.frame.gait(self.simulation_time, self.phase == Phase::Walking);
             } else {
                 self.frame.legs = [0.0; 2];
                 self.frame.arms = [0.0; 2];
                 if let Some(task) = self.task {
                     self.phase = Phase::Using;
+                    self.entry_position = self.ground_position;
                     self.elapsed = 0.0;
                     self.action = task.spec().label.into();
                     self.say(match task {
@@ -533,25 +583,35 @@ impl Game {
             let spec = task.spec();
             self.elapsed += dt;
             let t = (self.elapsed / 1.1).min(1.0);
-            self.frame.position = Vec3::lerp(spec.approach, spec.pose, t);
+            let ease = t * t * (3.0 - 2.0 * t);
+            self.frame.position = Vec3::lerp(self.entry_position, spec.pose, ease);
+            self.frame.gait(self.simulation_time, false);
             match task {
                 Task::Bed => {
-                    self.frame.rotation = [PI / 2.0 * t, 0.0, 0.0];
+                    // Face up, head on the pillow, body above the actual mattress.
+                    self.frame.rotation = [PI / 2.0 * ease, PI * ease, 0.0];
+                    self.frame.knees = [0.08 * ease; 2];
+                    self.frame.arms = [-0.12 * ease; 2];
                     self.frame.plumb = false;
                 }
                 Task::Tv | Task::Toilet => {
                     self.frame.rotation = [0.0, if task == Task::Tv { PI } else { 0.0 }, 0.0];
                     self.frame.legs = [-PI / 2.0 * t; 2];
-                    self.frame.arms = [-0.5 * t; 2];
+                    self.frame.knees = [PI / 2.0 * t; 2];
+                    self.frame.elbows = [0.65 * t; 2];
+                    self.frame.arms = [-0.3 * t; 2];
                 }
                 Task::Shower => {
                     self.frame.arms = [
-                        -1.7 + (self.elapsed * 3.0).sin() * 0.3,
-                        -1.2 - (self.elapsed * 3.0).sin() * 0.3,
+                        -1.2 + (self.elapsed * 2.0).sin() * 0.2,
+                        -0.9 - (self.elapsed * 2.0).sin() * 0.2,
                     ];
+                    self.frame.elbows = [1.0, 1.2];
                 }
                 Task::Eat => {
-                    self.frame.arms[1] = -1.4 + (self.elapsed * 2.0).sin() * 0.3;
+                    self.frame.rotation[1] = PI;
+                    self.frame.arms[1] = -0.55 + (self.elapsed * 2.0).sin() * 0.18;
+                    self.frame.elbows[1] = 1.7 + (self.elapsed * 2.0).sin() * 0.25;
                 }
             }
             if t == 1.0 {
@@ -563,9 +623,9 @@ impl Game {
                 self.psychology.event(task, if improved {
                     ActivityEvent::Completed
                 } else { ActivityEvent::Failed });
-                self.restore();
-                self.task = None;
-                self.phase = Phase::Idle;
+                self.exit_pose = self.frame.clone();
+                self.phase = Phase::Exiting;
+                self.elapsed = 0.0;
                 self.decision_in = 2.0;
                 self.action = "Descansando".into();
                 self.manual_order = false;
@@ -579,6 +639,28 @@ impl Game {
                     }
                 } else { "Eso no salió como esperaba." });
             }
+        }
+        if self.phase == Phase::Exiting {
+            self.elapsed += dt;
+            let t = (self.elapsed / 0.65).min(1.0);
+            let t = t * t * (3.0 - 2.0 * t);
+            self.frame.position = Vec3::lerp(self.exit_pose.position, self.ground_position, t);
+            for i in 0..3 { self.frame.rotation[i] = self.exit_pose.rotation[i] * (1.0 - t); }
+            for i in 0..2 {
+                self.frame.legs[i] = self.exit_pose.legs[i] * (1.0 - t);
+                self.frame.knees[i] = self.exit_pose.knees[i] * (1.0 - t);
+                self.frame.arms[i] = self.exit_pose.arms[i] * (1.0 - t);
+                self.frame.elbows[i] = self.exit_pose.elbows[i] * (1.0 - t) + 0.12 * t;
+            }
+            if t >= 1.0 {
+                self.restore();
+                self.task = None;
+                self.phase = Phase::Idle;
+                self.decision_in = 2.0;
+            }
+        }
+        if self.phase == Phase::Idle {
+            self.frame.gait(self.simulation_time, false);
         }
         self.frame.drops = self.phase == Phase::Using && self.task == Some(Task::Shower);
         if self.frame.drops {

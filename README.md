@@ -42,6 +42,30 @@ una actividad. El lavabo activa Comer, igual que en la referencia.
 El botón de pausa y la barra espaciadora pausan o reanudan la simulación.
 El botón del personaje y Escape abren o cierran el creador.
 
+## Personajes e interacción
+
+El protagonista, Mara y Nicolás usan un modelo humano de aproximadamente
+1,89 unidades: cabeza proporcionada, mandíbula, nariz, orejas, manos con
+dedos, ropa y un esqueleto con caderas, rodillas, hombros y codos.
+La marcha articula las piernas y brazos; el reposo incluye respiración y
+parpadeo. El modelo es procedural y se incluye en el ejecutable.
+
+El panel **EN CASA** permite saludar, hablar o bromear con Mara y Nicolás.
+También se puede pulsar su cuerpo para seleccionarlos. El protagonista se
+acerca por un camino libre, los dos se miran, gesticulan y alternan frases.
+Los residentes caminan por la casa y pueden iniciar encuentros cercanos
+entre ellos o con el protagonista. Las conversaciones completadas mejoran
+el afecto, la confianza y la familiaridad en ambas direcciones, usando los
+estados y reportes reales de MSPA. Las órdenes de movimiento o de muebles
+interrumpen el encuentro. La pausa y el creador detienen a todos.
+
+La posición navegable se conserva separada de la pose animada. La cama tiene
+el personaje boca arriba, con la cabeza sobre la almohada; la postura de
+sentado flexiona rodillas y caderas. Al terminar se anima la salida hasta el
+punto libre de entrada. Una orden durante el uso parte de ese mismo punto,
+evitando intentar caminar desde el interior del váter, la ducha o la cama.
+El acceso del baño es más ancho y los obstáculos salen de las mallas reales.
+
 ## Psicología del personaje
 
 [MSPA-Lib](https://github.com/glitchaka/MSPA-Lib) está integrada y enlazada
@@ -77,6 +101,8 @@ partidas entre ejecuciones. La revisión de MSPA incluida es
 
 - `src/main.rs` y `src/native.rs`: aplicación, GPU e interacción 3D.
 - `src/geometry.rs` y `src/scene.rs`: habitación y personaje articulado.
+- `src/human.rs`: superficies anatómicas, ropa y esqueleto humano.
+- `src/society.rs`: residentes, encuentros físicos y conversaciones recíprocas.
 - `src/game.rs`: necesidades, autonomía, navegación y actividades.
 - `src/psychology.rs`: propietario Rust del runtime y traducción de estados a expresiones.
 - `native/mspa_bridge.cpp`: Domain Pack de la casa y puente con el núcleo MSPA real.

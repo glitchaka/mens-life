@@ -67,14 +67,14 @@ impl SceneSpec {
     fn cyl(&mut self, r: f64, h: f64, p: [f64; 3], c: u32, n: &str) -> String {
         self.mesh("cylinder", &[r, r, h, 24.0], p, c, 0.65, n, [true, false])
     }
-    fn last(&mut self) -> &mut Value {
+    pub(crate) fn last(&mut self) -> &mut Value {
         self.objects.last_mut().unwrap()
     }
-    fn group(&mut self, id: &str, p: [f64; 3], parent: Option<&str>) {
+    pub(crate) fn group(&mut self, id: &str, p: [f64; 3], parent: Option<&str>) {
         self.objects
             .push(json!({"id":id,"kind":"group","position":p,"parent":parent}));
     }
-    fn person_mesh(
+    pub(crate) fn person_mesh(
         &mut self,
         id: &str,
         kind: &str,
@@ -116,8 +116,8 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.box_mesh([0.25, 4.5, 11.0], [-7.45, 2.1, 0.0], 0xf1dfc4, "");
     s.box_mesh([15.0, 4.5, 0.25], [0.0, 2.1, -5.45], 0xead7bc, "");
     s.box_mesh([5.2, 0.06, 3.4], [2.0, 0.04, 1.1], 0x557d7b, "");
-    s.box_mesh([4.4, 0.75, 1.35], [3.5, 0.55, 3.2], 0xc89066, "");
-    s.box_mesh([4.4, 0.8, 0.32], [3.5, 1.15, 3.72], 0xb67854, "");
+    s.box_mesh([4.4, 0.32, 1.35], [3.5, 0.32, 3.2], 0xc89066, "");
+    s.box_mesh([4.4, 0.68, 0.26], [3.5, 0.7, 3.72], 0xb67854, "");
     s.box_mesh([2.5, 0.22, 1.25], [2.0, 0.35, 0.55], 0x9b6c43, "");
     for x in [1.05, 2.95] {
         s.box_mesh([0.18, 0.6, 0.18], [x, 0.12, 0.15], 0x604430, "");
@@ -126,10 +126,11 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.box_mesh([3.25, 2.05, 0.28], [2.0, 1.9, -4.18], 0x24272d, "tv");
     s.box_mesh([2.75, 1.5, 0.03], [2.0, 1.9, -4.02], 0x315d71, "tv");
     for (z, p, c) in [
-        ([5.1, 0.55, 3.25], [-4.25, 0.4, 2.7], 0x815942),
-        ([4.75, 0.65, 2.85], [-4.25, 0.82, 2.7], 0xdbc8a5),
-        ([4.75, 0.22, 1.65], [-4.25, 1.15, 3.3], 0xb86554),
-        ([1.6, 0.3, 0.78], [-4.25, 1.36, 3.72], 0xf2e7d3),
+        ([2.8, 0.42, 3.65], [-4.6, 0.44, 2.65], 0x815942),
+        ([2.6, 0.35, 3.4], [-4.6, 0.79, 2.65], 0xe0d2b8),
+        ([2.62, 0.12, 2.25], [-4.6, 1.0, 2.15], 0x9b675b),
+        ([1.1, 0.18, 0.58], [-4.6, 1.05, 3.8], 0xf2e7d3),
+        ([2.85, 0.9, 0.16], [-4.6, 1.05, 4.4], 0x73513c),
     ] {
         s.box_mesh(z, p, c, "bed");
     }
@@ -137,13 +138,13 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.box_mesh([1.3, 0.08, 1.2], [-6.25, 1.74, 0.6], 0xd6b873, "");
     s.box_mesh([5.2, 0.08, 3.35], [-4.65, 0.02, -3.45], 0xbad0cf, "");
     s.box_mesh([0.18, 3.5, 3.6], [-2.12, 1.7, -3.62], 0xe4ece8, "");
-    s.box_mesh([1.5, 1.05, 0.18], [-6.5, 0.5, -1.7], 0xe4ece8, "");
-    s.box_mesh([2.2, 1.05, 0.18], [-3.22, 0.5, -1.7], 0xe4ece8, "");
+    s.box_mesh([1.2, 1.05, 0.18], [-6.65, 0.5, -1.7], 0xe4ece8, "");
+    s.box_mesh([1.2, 1.05, 0.18], [-2.72, 0.5, -1.7], 0xe4ece8, "");
     s.box_mesh([2.15, 0.2, 1.7], [-5.75, 0.12, -4.25], 0xf4f6f2, "shower");
     s.mesh(
         "box",
         &[0.06, 2.7, 1.8],
-        [-4.68, 1.4, -4.2],
+        [-5.0, 1.4, -4.35],
         0xbfe0e5,
         0.1,
         "shower",
@@ -155,12 +156,12 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.cyl(0.38, 0.08, [-6.3, 2.35, -4.9], 0xb4b8b5, "shower");
     s.last()["id"] = json!("shower-head");
     s.last()["rotation"] = json!([0, 0, PI / 2.0]);
-    s.box_mesh([1.05, 0.48, 1.15], [-3.25, 0.35, -4.35], 0xf4f2e9, "toilet");
-    s.cyl(0.53, 0.48, [-3.25, 0.65, -4.12], 0xf4f2e9, "toilet");
-    s.box_mesh([1.2, 1.05, 0.35], [-3.25, 1.05, -5.02], 0xf4f2e9, "toilet");
-    s.box_mesh([1.35, 0.25, 0.85], [-3.15, 1.05, -2.35], 0xf5f2e9, "sink");
-    s.cyl(0.12, 0.95, [-3.15, 0.52, -2.35], 0xb9b5aa, "");
-    s.box_mesh([1.5, 1.3, 0.08], [-3.15, 2.05, -1.82], 0x91b8bd, "");
+    s.box_mesh([0.62, 0.38, 0.72], [-3.65, 0.28, -4.3], 0xf4f2e9, "toilet");
+    s.cyl(0.36, 0.16, [-3.65, 0.45, -4.2], 0xf4f2e9, "toilet");
+    s.box_mesh([0.72, 0.65, 0.25], [-3.65, 0.75, -4.8], 0xf4f2e9, "toilet");
+    s.box_mesh([0.9, 0.18, 0.6], [-2.85, 0.95, -2.5], 0xf5f2e9, "sink");
+    s.cyl(0.10, 0.85, [-2.85, 0.45, -2.5], 0xb9b5aa, "");
+    s.box_mesh([0.75, 0.85, 0.08], [-2.22, 1.85, -2.6], 0x91b8bd, "");
     s.box_mesh([2.3, 1.9, 0.18], [-2.7, 2.5, -5.27], 0x6f5241, "");
     s.box_mesh([1.9, 1.5, 0.03], [-2.7, 2.5, -5.38], 0xe4b663, "");
     s.cyl(0.48, 0.55, [6.3, 0.3, -4.25], 0x9d6c4e, "");
@@ -210,143 +211,20 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     for node in &s.objects {
         let id = node["id"].as_str().unwrap();
         let y = node["position"][1].as_f64().unwrap();
-        let name = node["name"].as_str().unwrap_or("");
         if id != floor
             && id != "floor"
-            && id != "glass"
             && id != "shower-head"
             && y > 0.1
             && y < 2.0
-            && name != "bed"
-            && name != "toilet"
         {
             s.obstacles.push(id.into());
         }
     }
 
-    s.group("person", [0.0, 0.0, 2.0], None);
-    s.person_mesh(
-        "torso",
-        "capsule",
-        &[
-            if avatar.body == "atlético" {
-                0.44
-            } else {
-                0.4
-            },
-            0.72,
-            8.0,
-            18.0,
-        ],
-        [0.0, 1.38, 0.0],
-        "shirt",
-        "person",
-    );
-    s.last()["scale"] = json!([1, 1, if avatar.body == "delgado" { 0.78 } else { 0.92 }]);
-    s.person_mesh(
-        "neck",
-        "cylinder",
-        &[0.16, 0.18, 0.22, 18.0],
-        [0.0, 1.92, 0.0],
-        "skin",
-        "person",
-    );
-    s.person_mesh(
-        "head",
-        "sphere",
-        &[0.36, 32.0, 24.0],
-        [0.0, 2.25, 0.0],
-        "skin",
-        "person",
-    );
-    s.last()["scale"] = json!([0.92, 1.12, 0.94]);
-    s.person_mesh(
-        "nose",
-        "cone",
-        &[0.065, 0.16, 16.0],
-        [0.0, 2.25, 0.36],
-        "skin",
-        "person",
-    );
-    s.last()["rotation"] = json!([PI / 2.0, 0, 0]);
-    for (i, x) in [-0.13, 0.13].iter().enumerate() {
-        s.person_mesh(
-            &format!("eye-{i}"),
-            "sphere",
-            &[0.032, 12.0, 8.0],
-            [*x, 2.32, 0.337],
-            "eyes",
-            "person",
-        );
+    crate::human::append(&mut s, avatar, "", [0.0, 0.0, 2.0], true);
+    for (id, resident, position) in residents() {
+        crate::human::append(&mut s, &resident, &format!("npc-{id}/"), position, false);
     }
-    s.person_mesh(
-        "hair",
-        "sphere",
-        &[0.375, 28.0, 16.0, 0.0, PI * 2.0, 0.0, PI * 0.52],
-        [0.0, 2.32, 0.0],
-        "hair",
-        "person",
-    );
-    s.last()["scale"] = json!([0.94, 1.1, 0.96]);
-    s.person_mesh(
-        "hips",
-        "box",
-        &[0.62, 0.32, 0.36],
-        [0.0, 0.92, 0.0],
-        "pants",
-        "person",
-    );
-    for (i, x) in [-0.2, 0.2].iter().enumerate() {
-        let id = format!("leg-{i}");
-        s.group(&id, [*x, 0.82, 0.0], Some("person"));
-        s.person_mesh(
-            &format!("upper-{i}"),
-            "capsule",
-            &[0.105, 0.48, 6.0, 12.0],
-            [0.0, -0.28, 0.0],
-            "pants",
-            &id,
-        );
-        s.person_mesh(
-            &format!("shoe-{i}"),
-            "box",
-            &[0.24, 0.17, 0.42],
-            [0.0, -0.68, 0.1],
-            "shoes",
-            &id,
-        );
-    }
-    for (i, x) in [-0.55, 0.55].iter().enumerate() {
-        let id = format!("arm-{i}");
-        s.group(&id, [*x, 1.66, 0.0], Some("person"));
-        s.person_mesh(
-            &format!("limb-{i}"),
-            "capsule",
-            &[0.09, 0.56, 6.0, 12.0],
-            [0.0, -0.3, 0.0],
-            "shirt",
-            &id,
-        );
-        s.person_mesh(
-            &format!("hand-{i}"),
-            "sphere",
-            &[0.105, 16.0, 12.0],
-            [0.0, -0.68, 0.0],
-            "skin",
-            &id,
-        );
-    }
-    s.person_mesh(
-        "plumb",
-        "octahedron",
-        &[0.28],
-        [0.0, 3.25, 0.0],
-        "eyes",
-        "person",
-    );
-    s.last()["material_ref"] = Value::Null;
-    s.last()["material"] = json!({"type":"standard","color":0x6bd870,"emissive":0x163b18});
-    s.last()["scale"] = json!([1, 1.75, 1]);
     s.box_mesh([2.85, 1.65, 0.035], [2.0, 1.9, -4.01], 0x17212b, "tv");
     s.last()["id"] = json!("tv-screen");
     s.group("drops", [0.0; 3], None);
@@ -371,4 +249,14 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
             json!({"type":"basic","color":0x98d6f6,"transparent":true,"opacity":0.65});
     }
     s
+}
+
+/// Stable IDs used by rendering, physical interaction and MSPA relationship targets.
+pub fn residents() -> Vec<(u64, Avatar, [f64;3])> {
+    vec![
+        (2, Avatar { name: "Mara".into(), body: "delgado".into(), skin: "#b78467".into(),
+            hair: "#382b24".into(), shirt: "#8a5360".into(), pants: "#484c4b".into() }, [-0.8,0.0,0.0]),
+        (3, Avatar { name: "Nicolás".into(), body: "adulto".into(), skin: "#d4a181".into(),
+            hair: "#342b23".into(), shirt: "#64785d".into(), pants: "#494d5b".into() }, [4.0,0.0,1.9]),
+    ]
 }
