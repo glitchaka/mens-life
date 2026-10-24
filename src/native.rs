@@ -8,13 +8,12 @@ use bevy::{
     mesh::VertexAttributeValues,
     prelude::*,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
-    scene::SceneRoot,
     window::{PrimaryWindow, WindowResolution},
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
 use mens_life::{
     game::{Game, Navigation, Task, Vec3 as Point},
-    geometry, house, mspa_ui, perception,
+    geometry, mspa_ui, perception,
     scene::{self, Avatar},
     society::Society,
     ui,
