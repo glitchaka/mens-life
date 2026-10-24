@@ -38,17 +38,22 @@ fn trait_grid(ui: &mut egui::Ui, state: PsychState) {
         });
 }
 
-fn state_for<'a>(game: &'a Game, society: &'a Society, id: u64) -> (&'a str, &'a Psychology) {
+fn state_for<'a>(
+    game: &'a Game,
+    society: &'a Society,
+    id: u64,
+    protagonist_name: &'a str,
+) -> (&'a str, &'a Psychology) {
     if id == 1 {
-        ("Alex", &game.psychology)
+        (protagonist_name, &game.psychology)
     } else if let Some(resident) = society.residents.iter().find(|resident| resident.id == id) {
         (&resident.avatar.name, &resident.psychology)
     } else {
-        ("Alex", &game.psychology)
+        (protagonist_name, &game.psychology)
     }
 }
 
-pub fn draw(ctx: &egui::Context, game: &Game, society: &Society) {
+pub fn draw(ctx: &egui::Context, game: &Game, society: &Society, protagonist_name: &str) {
     if game.creator { return; }
 
     let key = Id::new("mspa-inspected-character");
@@ -64,7 +69,7 @@ pub fn draw(ctx: &egui::Context, game: &Game, society: &Society) {
         .collapsible(true)
         .show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
-                if ui.selectable_label(inspected == 1, "Alex").clicked() {
+                if ui.selectable_label(inspected == 1, protagonist_name).clicked() {
                     inspected = 1;
                 }
                 for resident in &society.residents {
@@ -76,7 +81,7 @@ pub fn draw(ctx: &egui::Context, game: &Game, society: &Society) {
             ctx.data_mut(|data| data.insert_temp(key, inspected));
             ui.separator();
 
-            let (name, psychology) = state_for(game, society, inspected);
+            let (name, psychology) = state_for(game, society, inspected, protagonist_name);
             let state = psychology.state;
             ui.horizontal(|ui| {
                 ui.label(RichText::new(name).strong().size(17.0));
