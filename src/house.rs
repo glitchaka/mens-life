@@ -1,41 +1,53 @@
-//! Gameplay integration for the imported dwelling.
-//! The FBX-derived GLB is the sole visual authority. This module only defines
-//! invisible interaction volumes and conservative navigation collision.
+//! Imported Autumn House integration.
+//! Visual architecture is converted from the supplied `House_scene_01.fbx`;
+//! this module owns only asset materialization and structural collision proxies.
 use crate::scene::SceneSpec;
 use serde_json::json;
 
-/// Converted directly from `House_scene_01.fbx` supplied in `autumn-house.zip`.
-pub const VISUAL_ASSET: &str = "house/autumn_house.glb#Scene0";
+pub const VISUAL_ASSET: &str = "house/autumn_house.gltf#Scene0";
 
-fn proxy(s: &mut SceneSpec, size: [f64; 3], at: [f64; 3], name: &str, obstacle: bool) {
-    let id = s.box_mesh(size, at, 0xffffff, name);
-    s.last()["visible"] = json!(false);
-    if obstacle {
-        s.obstacles.push(id);
+/// Reassembles the compact FBX-derived glTF into Bevy's runtime asset root.
+/// The source is split only to keep repository text writes manageable; at
+/// runtime Bevy sees a normal single glTF file with embedded vertex data.
+pub fn prepare_asset_root() -> String {
+    const EXPECTED_BYTES: usize = 60_241;
+    let root = std::env::temp_dir().join("mens-life-assets-autumn-house-v2");
+    let folder = root.join("house");
+    let target = folder.join("autumn_house.gltf");
+    let valid = std::fs::metadata(&target)
+        .is_ok_and(|metadata| metadata.len() == EXPECTED_BYTES as u64);
+    if !valid {
+        std::fs::create_dir_all(&folder).expect("cannot create Autumn House asset cache");
+        let chunks = [
+            include_str!("../assets/house/autumn_house.gltf.part00"),
+            include_str!("../assets/house/autumn_house.gltf.part01"),
+            include_str!("../assets/house/autumn_house.gltf.part02"),
+            include_str!("../assets/house/autumn_house.gltf.part03"),
+            include_str!("../assets/house/autumn_house.gltf.part04"),
+        ];
+        let mut source = String::with_capacity(EXPECTED_BYTES);
+        for chunk in chunks {
+            source.push_str(chunk);
+        }
+        assert_eq!(source.len(), EXPECTED_BYTES, "Autumn House asset chunks are incomplete");
+        std::fs::write(&target, source).expect("cannot materialize Autumn House asset");
     }
+    root.to_string_lossy().into_owned()
 }
 
-/// Invisible geometry aligned to the existing task poses. Rendering comes only
-/// from [`VISUAL_ASSET`], so none of these boxes can visually replace or cover
-/// the house supplied by the user.
+fn wall(s: &mut SceneSpec, size: [f64; 3], at: [f64; 3]) {
+    let id = s.box_mesh(size, at, 0xffffff, "");
+    s.last()["visible"] = json!(false);
+    s.obstacles.push(id);
+}
+
+/// Conservative collision around the imported shell. Furniture collision and
+/// click targets belong to `furnishings`, not to the architectural asset layer.
 pub(crate) fn append(s: &mut SceneSpec) {
-    // Outer transformed footprint. The front is deliberately split to keep an
-    // entrance and free circulation for both the protagonist and residents.
-    proxy(s, [0.18, 2.8, 7.75], [-6.18, 1.35, -0.42], "", true);
-    proxy(s, [0.18, 2.8, 7.75], [3.72, 1.35, -0.42], "", true);
-    proxy(s, [9.95, 2.8, 0.18], [-1.23, 1.35, -4.31], "", true);
-    proxy(s, [3.45, 2.8, 0.18], [-4.45, 1.35, 3.49], "", true);
-    proxy(s, [3.45, 2.8, 0.18], [2.02, 1.35, 3.49], "", true);
-
-    // Interactive furniture volumes. Their names are the host-facing task IDs
-    // consumed by native.rs. They are hidden but still ray-castable.
-    proxy(s, [2.75, 1.05, 3.25], [-4.62, 0.52, 2.78], "bed", true);
-    proxy(s, [2.72, 2.10, 0.52], [2.60, 1.05, 0.66], "tv", true);
-    proxy(s, [1.55, 2.35, 1.42], [-5.92, 1.17, -4.08], "shower", true);
-    proxy(s, [0.78, 1.10, 0.82], [-3.65, 0.55, -4.25], "toilet", true);
-    proxy(s, [3.12, 1.10, 0.92], [3.02, 0.55, -2.12], "sink", true);
-
-    // A couple of large fixed masses prevent pathfinding from cutting through
-    // the imported kitchen/cabinetry while leaving the task approach points free.
-    proxy(s, [2.70, 1.05, 0.72], [2.90, 0.52, -4.12], "", true);
+    wall(s, [0.16, 2.8, 8.10], [-6.22, 1.35, -0.40]);
+    wall(s, [0.16, 2.8, 8.10], [4.20, 1.35, -0.40]);
+    wall(s, [10.50, 2.8, 0.16], [-1.01, 1.35, -4.48]);
+    // Camera-side wall is split so the front opening remains traversable.
+    wall(s, [3.80, 2.8, 0.16], [-4.25, 1.35, 3.68]);
+    wall(s, [3.80, 2.8, 0.16], [2.25, 1.35, 3.68]);
 }
