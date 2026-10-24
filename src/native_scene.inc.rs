@@ -149,7 +149,7 @@ fn interface(
     } = &mut *life;
     *changed |= ui::draw(ctx, game, avatar).avatar_changed;
     ui::draw_social(ctx, game, society);
-    mspa_ui::draw(ctx, game, society);
+    mspa_ui::draw(ctx, game, society, &avatar.name);
 
     let frame = &game.frame;
     let rotation = Quat::from_euler(
