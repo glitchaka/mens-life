@@ -150,8 +150,7 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
         objects: vec![], obstacles: vec![], drops_y: vec![],
     };
 
-    // Shell: the same physical footprint remains navigable, but the layout is now
-    // a complete, furnished house rather than one compressed open room.
+    // Shell: same physical footprint, but now a complete furnished house instead of a compressed room.
     let floor = s.box_mesh([15.0, 0.34, 11.0], [0.0, -0.22, 0.0], 0xc9ad82, "");
     s.last()["id"] = json!("floor");
     for i in -7..=7 {
@@ -162,7 +161,6 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     trim_z(&mut s, 10.8, -7.34, 0.0);
     trim_x(&mut s, 14.7, 0.0, -5.34);
 
-    // Large windows and framed wall art break up the long exterior walls.
     for x in [-4.9, 0.0, 4.9] {
         s.box_mesh([2.35, 1.45, 0.05], [x, 2.10, -5.30], 0x90b8c1, "");
         s.last()["material"] = json!({"type":"physical","color":0x9bc8d1,"transparent":true,"opacity":0.42,"roughness":0.08});
@@ -172,7 +170,7 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.box_mesh([0.05, 1.45, 2.35], [-7.30, 2.10, 3.65], 0x90b8c1, "");
     s.last()["material"] = json!({"type":"physical","color":0x9bc8d1,"transparent":true,"opacity":0.42,"roughness":0.08});
 
-    // MASTER BEDROOM — generous room with wardrobe, seating and bedside furniture.
+    // Master bedroom.
     wall_z(&mut s, 4.10, -2.05, 3.30);
     wall_x(&mut s, 3.80, -5.40, 1.25);
     wall_x(&mut s, 0.48, -2.29, 1.25);
@@ -187,19 +185,18 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.box_mesh([1.55, 2.35, 0.72], [-6.35, 1.18, 5.00], 0x806653, "");
     s.box_mesh([1.18, 2.08, 0.05], [-6.35, 1.20, 4.60], 0x9d8065, "");
     s.box_mesh([1.15, 0.45, 0.58], [-2.78, 0.33, 4.62], 0xb78d70, "");
-    picture(&mut s, -5.35, 2.20, -5.27, 1.25, 0xc08a74);
 
-    // SECOND BEDROOM / STUDY — visually reads as another real room rather than a corridor.
-    wall_z(&mut s, 3.25, 1.28, 3.78);
-    wall_x(&mut s, 2.02, -0.65, 2.10);
-    wall_x(&mut s, 0.52, 1.02, 2.10);
-    flat(&mut s, [2.85, 2.85], [-0.30, 3.75], 0xb8b1a2);
+    // Second bedroom / study. Its doorway and lower wall leave the initial player spawn clear.
+    wall_z(&mut s, 2.80, 1.28, 4.00);
+    wall_x(&mut s, 2.02, -0.65, 2.55);
+    wall_x(&mut s, 0.52, 1.02, 2.55);
+    flat(&mut s, [2.85, 2.55], [-0.30, 4.02], 0xb8b1a2);
     simple_bed(&mut s, -0.18, 4.10, false);
-    s.box_mesh([1.42, 0.13, 0.62], [-1.15, 0.76, 2.76], 0x8f674b, "");
-    for x in [-1.72, -0.58] { s.cyl(0.07, 0.76, [x, 0.39, 2.76], 0x5d4a3c, ""); }
-    s.box_mesh([0.65, 0.72, 0.65], [-1.12, 0.37, 3.48], 0x71847a, "");
+    s.box_mesh([1.42, 0.13, 0.62], [-1.15, 0.76, 2.96], 0x8f674b, "");
+    for x in [-1.72, -0.58] { s.cyl(0.07, 0.76, [x, 0.39, 2.96], 0x5d4a3c, ""); }
+    s.box_mesh([0.65, 0.72, 0.65], [-1.12, 0.37, 3.62], 0x71847a, "");
 
-    // BATHROOM — full wet room with separate shower, toilet and vanity.
+    // Full bathroom.
     flat(&mut s, [5.10, 3.08], [-4.70, -3.72], 0xbecfd0);
     wall_z(&mut s, 3.12, -2.10, -3.80);
     wall_x(&mut s, 1.00, -6.82, -2.22);
@@ -219,13 +216,13 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.cyl(0.25, 0.12, [-2.75, 0.88, -3.05], 0xf8f7f1, "");
     s.box_mesh([0.92, 1.18, 0.06], [-2.15, 1.67, -3.12], 0x8fb5ba, "");
 
-    // LIVING ROOM — oversized rug, deep sofa, coffee table, media wall and reading corner.
+    // Living room.
     flat(&mut s, [5.25, 3.75], [3.55, 2.87], 0x718987);
     s.box_mesh([4.25, 0.38, 1.38], [3.35, 0.38, 3.42], 0x9cae9f, "");
     s.box_mesh([4.00, 0.72, 0.30], [3.35, 0.80, 4.00], 0x87998b, "");
     s.box_mesh([1.18, 0.34, 1.36], [5.58, 0.42, 3.42], 0x9cae9f, "");
-    s.box_mesh([2.20, 0.22, 1.05], [3.30, 0.28, 2.12], 0x8a674e, "");
-    s.box_mesh([1.84, 0.06, 0.78], [3.30, 0.41, 2.12], 0xb89672, "");
+    s.box_mesh([1.65, 0.22, 0.85], [5.40, 0.28, 2.25], 0x8a674e, "");
+    s.box_mesh([1.35, 0.06, 0.62], [5.40, 0.41, 2.25], 0xb89672, "");
     s.box_mesh([3.72, 0.50, 0.48], [2.60, 0.35, 0.66], 0x6c5548, "tv");
     s.box_mesh([3.35, 2.08, 0.22], [2.60, 1.65, 0.54], 0x292b2e, "tv");
     s.box_mesh([2.92, 1.62, 0.035], [2.60, 1.65, 0.40], 0x17212b, "tv");
@@ -234,7 +231,7 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     lamp(&mut s, 6.35, 4.45);
     plant(&mut s, 6.48, 1.08, 0.95);
 
-    // KITCHEN — long run of cabinetry plus an island. The sink remains the host's Eat target.
+    // Kitchen and island. The physical Eat approach remains free in front of it.
     flat(&mut s, [7.05, 3.18], [3.72, -3.55], 0xc9c5b9);
     s.box_mesh([5.90, 0.88, 0.76], [3.80, 0.45, -4.68], 0x839287, "");
     s.box_mesh([5.96, 0.11, 0.84], [3.80, 0.95, -4.68], 0xeee9df, "");
@@ -248,12 +245,12 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.cyl(0.29, 0.10, [2.46, 0.96, -2.16], 0xaeb7b5, "sink");
     s.cyl(0.045, 0.42, [2.62, 1.20, -2.34], 0x9ca5a3, "sink");
     s.box_mesh([0.54, 0.10, 0.36], [3.76, 0.99, -2.16], 0x292e2f, "");
-    for x in [2.15, 3.05, 3.95] {
+    for x in [2.05, 4.05] {
         s.box_mesh([0.52, 0.12, 0.52], [x, 0.52, -1.18], 0xb78665, "");
         s.cyl(0.075, 0.82, [x, 0.09, -1.18], 0x624b3c, "");
     }
 
-    // DINING / ENTRY — a proper table gives the centre of the house a second social area.
+    // Dining and entry.
     s.box_mesh([3.28, 0.18, 1.48], [5.00, 0.78, -0.18], 0xa27856, "");
     for (x, z) in [(3.72,-0.18),(6.28,-0.18),(5.00,-1.16),(5.00,0.80)] {
         s.box_mesh([0.72, 0.14, 0.72], [x, 0.52, z], 0xc08b68, "");
@@ -263,7 +260,7 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     s.box_mesh([1.22, 1.10, 0.06], [-0.82, 1.22, -0.34], 0x9eb7b5, "");
     plant(&mut s, -1.35, -1.20, 0.75);
 
-    // Decorative lighting and artwork make the interior feel inhabited.
+    // Decorative lighting and artwork.
     s.cyl(0.50, 0.28, [0.15, 2.92, 0.15], 0xe4c680, "");
     s.cyl(0.04, 2.55, [0.15, 1.47, 0.15], 0x554d45, "");
     picture(&mut s, 4.90, 2.25, -5.27, 1.42, 0x8da29b);
