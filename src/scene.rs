@@ -1,4 +1,4 @@
-//! Scene composition. Static architecture, people and transient effects live in dedicated modules.
+//! Scene composition. Architecture, furnishings, people and transient effects live in dedicated modules.
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -114,12 +114,12 @@ fn append_shower_drops(s: &mut SceneSpec, random: &[f64]) {
     s.last()["visible"] = json!(false);
     for i in 0..30_usize {
         let sample = |j: usize| random.get(i * 3 + j).copied().unwrap_or(0.5);
-        let y = sample(1) * 2.4;
+        let y = sample(1) * 2.15;
         s.drops_y.push(y);
         s.mesh(
             "sphere",
             &[0.025, 6.0, 4.0],
-            [-6.3 + sample(0) * 0.7, y, -4.7 + sample(2) * 0.7],
+            [-6.14 + sample(0) * 0.48, y, -4.35 + sample(2) * 0.62],
             0x98d6f6,
             1.0,
             "",
@@ -134,10 +134,12 @@ fn append_shower_drops(s: &mut SceneSpec, random: &[f64]) {
     }
 }
 
-/// Scene composition root. It delegates each responsibility instead of owning its implementation.
+/// Composition root: the imported house, interior, people and effects are each
+/// delegated to their own module rather than being authored here.
 pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     let mut scene = SceneSpec::new(avatar);
     crate::house::append(&mut scene);
+    crate::furnishings::append(&mut scene);
 
     crate::human::append(&mut scene, avatar, "", [0.0, 0.0, 2.0], true);
     for (id, resident, position) in residents() {
@@ -164,6 +166,6 @@ pub fn residents() -> Vec<(u64, Avatar, [f64;3])> {
         (3, Avatar {
             name: "Nicolás".into(), body: "adulto".into(), skin: "#d4a181".into(),
             hair: "#342b23".into(), shirt: "#64785d".into(), pants: "#494d5b".into()
-        }, [4.0,0.0,1.9]),
+        }, [3.55,0.0,0.25]),
     ]
 }
