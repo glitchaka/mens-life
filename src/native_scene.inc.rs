@@ -1,16 +1,13 @@
 fn setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut shared: ResMut<Materials>,
     mut life: ResMut<Life>,
     capture: Res<Capture>,
 ) {
-    // The supplied autumn-house FBX is converted to glTF and is the visible
-    // architectural shell. SceneSpec contributes furniture, people and proxies.
-    commands.spawn(SceneRoot(asset_server.load(house::VISUAL_ASSET)));
-
+    // The supplied house is already baked into SceneSpec as native geometry.
+    // Furniture, people and invisible interaction/collision proxies are separate nodes.
     let spec = scene::build(&life.avatar, &life.random);
     for (id, value) in spec.materials.as_object().unwrap() {
         shared.0.insert(id.clone(), materials.add(material(value)));
@@ -185,7 +182,6 @@ fn interface(
         let screen = ctx.content_rect();
         for resident in &society.residents {
             let p = resident.frame.position;
-            // Larger stylized heads sit slightly higher than the old realistic rig.
             let head = Vec3::new(p.x as f32, p.y as f32 + 2.18, p.z as f32);
             if let Ok(position) = camera.world_to_viewport(transform, head) {
                 ui::draw_resident(
