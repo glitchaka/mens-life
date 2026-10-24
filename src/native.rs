@@ -8,12 +8,13 @@ use bevy::{
     mesh::VertexAttributeValues,
     prelude::*,
     render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk},
+    scene::SceneRoot,
     window::{PrimaryWindow, WindowResolution},
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
 use mens_life::{
-    game::{Game, Navigation, Task, Vec3 as Point},
-    geometry,
+    game::{Game, Navigation, Phase, Task, Vec3 as Point},
+    geometry, house, mspa_ui,
     scene::{self, Avatar},
     society::Society,
     ui,
@@ -45,6 +46,10 @@ struct Capture {
     skip_creator: bool,
     task: Option<Task>,
     simulate: u32,
+}
+#[derive(Resource, Default)]
+struct WorldAwareness {
+    last_using: Option<Task>,
 }
 
 fn color(v: &Value) -> Color {
@@ -81,6 +86,7 @@ fn material(v: &Value) -> StandardMaterial {
         ..default()
     }
 }
+
 pub fn run() {
     let mut capture = Capture::default();
     let mut args = std::env::args().skip(1);
@@ -130,6 +136,7 @@ pub fn run() {
             random,
         })
         .insert_resource(capture)
+        .insert_resource(WorldAwareness::default())
         .insert_resource(ClearColor(rgb(0x9ec7d0)))
         .insert_resource(AmbientLight {
             color: rgb(0xfff6df),
@@ -157,18 +164,22 @@ pub fn run() {
         .add_systems(EguiPrimaryContextPass, interface)
         .add_systems(
             Update,
-            (avatar_changed, advance, animate, pick, capture_frame).chain(),
+            (avatar_changed, advance, perceive_world, animate, pick, capture_frame).chain(),
         )
         .run();
 }
+
 fn setup(
     mut commands: Commands,
+    asset_server: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut shared: ResMut<Materials>,
     mut life: ResMut<Life>,
     capture: Res<Capture>,
 ) {
+    commands.spawn(SceneRoot(asset_server.load(house::VISUAL_ASSET)));
+
     let spec = scene::build(&life.avatar, &life.random);
     for (id, value) in spec.materials.as_object().unwrap() {
         shared.0.insert(id.clone(), materials.add(material(value)));
@@ -189,7 +200,9 @@ fn setup(
             Visibility::Inherited
         };
         let mut entity = commands.spawn((NodeId(id.into()), transform, visibility));
-        if let Some(actor) = node["actor"].as_u64() { entity.insert(Person(actor)); }
+        if let Some(actor) = node["actor"].as_u64() {
+            entity.insert(Person(actor));
+        }
         if node["kind"] != "group" {
             let mat = if let Some(id) = node["material_ref"].as_str() {
                 shared.0[id].clone()
@@ -225,6 +238,7 @@ fn setup(
         let entity = entity.id();
         entities.insert(id.into(), entity);
     }
+
     commands.spawn((
         DirectionalLight {
             color: rgb(0xfff0cf),
@@ -243,7 +257,6 @@ fn setup(
         .build(),
         Transform::from_xyz(-8.0, 16.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-    // Convert the point light's candela to lumens for Bevy's physical units.
     commands.spawn((
         PointLight {
             color: rgb(0xffd89b),
@@ -292,6 +305,7 @@ fn setup(
         society.tick(game, 0.05);
     }
 }
+
 fn interface(
     mut contexts: EguiContexts,
     mut life: ResMut<Life>,
@@ -307,42 +321,62 @@ fn interface(
     } = &mut *life;
     *changed |= ui::draw(ctx, game, avatar).avatar_changed;
     ui::draw_social(ctx, game, society);
+    mspa_ui::draw(ctx, game, society);
+
     let frame = &game.frame;
-    let rotation = Quat::from_euler(EulerRot::XYZ,
-        frame.rotation[0] as f32, frame.rotation[1] as f32, frame.rotation[2] as f32);
-    let head = Vec3::new(frame.position.x as f32, frame.position.y as f32, frame.position.z as f32)
-        + rotation * Vec3::new(0.0, 1.76, 0.0) + Vec3::Y * 0.4;
+    let rotation = Quat::from_euler(
+        EulerRot::XYZ,
+        frame.rotation[0] as f32,
+        frame.rotation[1] as f32,
+        frame.rotation[2] as f32,
+    );
+    let head = Vec3::new(
+        frame.position.x as f32,
+        frame.position.y as f32,
+        frame.position.z as f32,
+    ) + rotation * Vec3::new(0.0, 1.76, 0.0)
+        + Vec3::Y * 0.4;
     let (camera, transform) = *camera;
     if let Ok(position) = camera.world_to_viewport(transform, head) {
         let size = camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);
         let screen = ctx.content_rect();
-        ui::draw_reaction(ctx, game, [
-            screen.left() + position.x * screen.width() / size.x,
-            screen.top() + position.y * screen.height() / size.y,
-        ]);
+        ui::draw_reaction(
+            ctx,
+            game,
+            [
+                screen.left() + position.x * screen.width() / size.x,
+                screen.top() + position.y * screen.height() / size.y,
+            ],
+        );
     }
     if !game.creator {
         let size = camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);
         let screen = ctx.content_rect();
         for resident in &society.residents {
             let p = resident.frame.position;
-            let head = Vec3::new(p.x as f32, p.y as f32 + 2.05, p.z as f32);
+            let head = Vec3::new(p.x as f32, p.y as f32 + 2.18, p.z as f32);
             if let Ok(position) = camera.world_to_viewport(transform, head) {
-                ui::draw_resident(ctx, resident, [
-                    screen.left()+position.x*screen.width()/size.x,
-                    screen.top()+position.y*screen.height()/size.y,
-                ]);
+                ui::draw_resident(
+                    ctx,
+                    resident,
+                    [
+                        screen.left() + position.x * screen.width() / size.x,
+                        screen.top() + position.y * screen.height() / size.y,
+                    ],
+                );
             }
         }
     }
     Ok(())
 }
+
 fn configure_interface(mut contexts: EguiContexts, mut configured: Local<bool>) {
     if !*configured && let Ok(ctx) = contexts.ctx_mut() {
         ui::configure(ctx);
         *configured = true;
     }
 }
+
 fn avatar_changed(
     mut life: ResMut<Life>,
     shared: Res<Materials>,
@@ -356,21 +390,22 @@ fn avatar_changed(
     life.changed = false;
     let spec = scene::build(&life.avatar, &life.random);
     for (id, v) in spec.materials.as_object().unwrap() {
-        if let Some(mat) = materials.get_mut(&shared.0[id]) {
+        if let Some(mat) = shared.0.get(id).and_then(|h| materials.get_mut(h)) {
             *mat = material(v);
         }
     }
     for (id, mesh, mut transform) in &mut nodes {
         if let Some(node) = spec.objects.iter().find(|n| n["id"] == id.0 && n["actor"] == 1) {
-            if let Some(mut mesh) = mesh { mesh.0 = meshes.add(geometry::build(node).mesh()); }
-            transform.translation = geometry::vector(&node["position"], [0.0;3]).as_vec3();
+            if let Some(mut mesh) = mesh {
+                mesh.0 = meshes.add(geometry::build(node).mesh());
+            }
+            transform.translation = geometry::vector(&node["position"], [0.0; 3]).as_vec3();
             transform.scale = geometry::vector(&node["scale"], [1.0; 3]).as_vec3();
         }
     }
-    // Appearance edits keep the same person: never erase MSPA's memories,
-    // learned expectations, mood or current activity when changing a color/name.
     life.game.navigation = Navigation::new(geometry::navigation_bounds(&spec));
 }
+
 fn advance(
     time: Res<Time>,
     mut life: ResMut<Life>,
@@ -383,7 +418,6 @@ fn advance(
     if keys.just_pressed(KeyCode::Escape) {
         life.game.creator = !life.game.creator;
     }
-    // Captures preserve the requested state while the GPU warms its pipelines.
     if capture.path.is_none() {
         let dt = time.delta_secs_f64();
         life.game.tick(dt, time.elapsed_secs_f64() * 1000.0);
@@ -391,6 +425,47 @@ fn advance(
         society.tick(game, dt);
     }
 }
+
+fn perceive_world(mut life: ResMut<Life>, mut awareness: ResMut<WorldAwareness>) {
+    if life.game.creator || life.game.paused {
+        return;
+    }
+    let current = if life.game.phase == Phase::Using {
+        life.game.task
+    } else {
+        None
+    };
+    if current == awareness.last_using {
+        return;
+    }
+    awareness.last_using = current;
+    let Some(task) = current else { return; };
+
+    let source = task.spec().pose;
+    let words = match task {
+        Task::Bed => "Se oye que alguien se está acomodando para descansar.",
+        Task::Eat => "Huele a comida recién preparada.",
+        Task::Shower => "Se oye correr el agua de la ducha.",
+        Task::Tv => "La televisión acaba de encenderse.",
+        Task::Toilet => "Se oye movimiento en el baño.",
+    };
+    for resident in &mut life.society.residents {
+        let p = resident.frame.position;
+        let distance = (p.x - source.x).hypot(p.z - source.z);
+        if distance > 7.0 {
+            continue;
+        }
+        let salience = (1.0 - distance / 7.0).clamp(0.18, 1.0) as f32;
+        resident.psychology.notice(task, salience);
+        resident.reaction = mens_life::psychology::Reaction {
+            expression: resident.psychology.emotion(),
+            words: words.into(),
+            remaining: 4.5,
+        };
+        resident.action = "Ha notado algo en la casa".into();
+    }
+}
+
 fn animate(
     life: Res<Life>,
     shared: Res<Materials>,
@@ -399,11 +474,22 @@ fn animate(
 ) {
     for (id, mut t, mut v) in &mut nodes {
         let (actor, part) = if let Some(rest) = id.0.strip_prefix("npc-") {
-            let (actor,part) = rest.split_once('/').unwrap();
-            (actor.parse::<u64>().unwrap(),part)
-        } else { (1,id.0.as_str()) };
-        let f = if actor == 1 { &life.game.frame }
-            else { &life.society.residents.iter().find(|r| r.id == actor).unwrap().frame };
+            let (actor, part) = rest.split_once('/').unwrap();
+            (actor.parse::<u64>().unwrap(), part)
+        } else {
+            (1, id.0.as_str())
+        };
+        let f = if actor == 1 {
+            &life.game.frame
+        } else {
+            &life
+                .society
+                .residents
+                .iter()
+                .find(|r| r.id == actor)
+                .unwrap()
+                .frame
+        };
         match part {
             "person" => {
                 t.translation = Vec3::new(
@@ -422,19 +508,45 @@ fn animate(
             "leg-1" => t.rotation = Quat::from_rotation_x(f.legs[1] as f32),
             "knee-0" => t.rotation = Quat::from_rotation_x(f.knees[0] as f32),
             "knee-1" => t.rotation = Quat::from_rotation_x(f.knees[1] as f32),
-            "arm-0" => t.rotation = Quat::from_euler(EulerRot::XYZ,f.arms[0] as f32,0.0,-0.06),
-            "arm-1" => t.rotation = Quat::from_euler(EulerRot::XYZ,f.arms[1] as f32,0.0,0.06),
+            "arm-0" => {
+                t.rotation = Quat::from_euler(EulerRot::XYZ, f.arms[0] as f32, 0.0, -0.06)
+            }
+            "arm-1" => {
+                t.rotation = Quat::from_euler(EulerRot::XYZ, f.arms[1] as f32, 0.0, 0.06)
+            }
             "forearm-0" => t.rotation = Quat::from_rotation_x(-f.elbows[0] as f32),
             "forearm-1" => t.rotation = Quat::from_rotation_x(-f.elbows[1] as f32),
             "spine" => {
                 t.translation.y = 0.94 + f.breath as f32;
-                t.rotation = Quat::from_euler(EulerRot::XYZ,f.spine[0] as f32,f.spine[1] as f32,f.spine[2] as f32);
+                t.rotation = Quat::from_euler(
+                    EulerRot::XYZ,
+                    f.spine[0] as f32,
+                    f.spine[1] as f32,
+                    f.spine[2] as f32,
+                );
             }
-            "head-bone" => t.rotation = Quat::from_euler(EulerRot::XYZ,f.head[0] as f32,f.head[1] as f32,0.0),
-            "eye-white-0" | "eye-white-1" | "eye-0" | "eye-1" => {
+            "head-bone" => {
+                t.rotation = Quat::from_euler(
+                    EulerRot::XYZ,
+                    f.head[0] as f32,
+                    f.head[1] as f32,
+                    0.0,
+                )
+            }
+            "eye-white-0" | "eye-white-1" => {
                 let clock = (life.game.game_time * 0.8 + actor as f64).rem_euclid(4.8);
                 let blink = if clock < 0.14 { 0.12 } else { 1.0 };
-                t.scale.y = (if part.starts_with("eye-white") { 0.006 } else { 0.005 }) * blink;
+                t.scale.y = 0.044 * blink;
+            }
+            "eye-0" | "eye-1" => {
+                let clock = (life.game.game_time * 0.8 + actor as f64).rem_euclid(4.8);
+                let blink = if clock < 0.14 { 0.12 } else { 1.0 };
+                t.scale.y = 0.033 * blink;
+            }
+            "pupil-0" | "pupil-1" => {
+                let clock = (life.game.game_time * 0.8 + actor as f64).rem_euclid(4.8);
+                let blink = if clock < 0.14 { 0.12 } else { 1.0 };
+                t.scale.y = 0.016 * blink;
             }
             "plumb" => {
                 *v = if f.plumb {
@@ -458,7 +570,11 @@ fn animate(
         }
     }
     let f = &life.game.frame;
-    if let Some(mat) = shared.0.get("tv-screen").and_then(|h| materials.get_mut(h)) {
+    if let Some(mat) = shared
+        .0
+        .get("tv-screen")
+        .and_then(|h| materials.get_mut(h))
+    {
         mat.base_color = rgb(if f.watching { 0x79a7d3 } else { 0x17212b });
         mat.emissive = Color::hsl(
             f.screen_hue as f32 * 360.0,
@@ -468,7 +584,7 @@ fn animate(
         .to_linear();
     }
 }
-// Möller–Trumbore intersections use the same native triangles as the GPU.
+
 fn intersection(mesh: &Mesh, origin: Vec3, direction: Vec3) -> Option<f32> {
     let Some(VertexAttributeValues::Float32x3(p)) = mesh.attribute(Mesh::ATTRIBUTE_POSITION) else {
         return None;
@@ -504,6 +620,7 @@ fn intersection(mesh: &Mesh, origin: Vec3, direction: Vec3) -> Option<f32> {
     }
     closest.is_finite().then_some(closest)
 }
+
 fn pick(
     buttons: Res<ButtonInput<MouseButton>>,
     mut contexts: EguiContexts,
@@ -529,18 +646,28 @@ fn pick(
     let Ok(ray) = camera.0.viewport_to_world(camera.1, cursor) else {
         return;
     };
+
     let mut person_hit = None;
     let mut person_distance = f32::INFINITY;
-    for (person,handle,transform) in &people {
-        if person.0 == 1 { continue; }
-        let Some(mesh) = meshes.get(&handle.0) else { continue; };
+    for (person, handle, transform) in &people {
+        if person.0 == 1 {
+            continue;
+        }
+        let Some(mesh) = meshes.get(&handle.0) else {
+            continue;
+        };
         let inverse = transform.affine().inverse();
-        if let Some(t) = intersection(mesh,inverse.transform_point3(ray.origin),inverse.transform_vector3(*ray.direction))
-            && t < person_distance {
+        if let Some(t) = intersection(
+            mesh,
+            inverse.transform_point3(ray.origin),
+            inverse.transform_vector3(*ray.direction),
+        ) && t < person_distance
+        {
             person_distance = t;
             person_hit = Some(person.0);
         }
     }
+
     let mut hit = None;
     let mut closest = f32::INFINITY;
     for (f, handle, transform) in &furniture {
@@ -570,10 +697,12 @@ fn pick(
         let t = (-0.045 - ray.origin.y) / ray.direction.y;
         let p = ray.origin + *ray.direction * t;
         if t > 0.0 && p.x.abs() < 7.5 && p.z.abs() < 5.5 {
-            life.game.walk_to(Point::new(p.x as f64, 0.0, p.z as f64));
+            life.game
+                .walk_to(Point::new(p.x as f64, 0.0, p.z as f64));
         }
     }
 }
+
 fn capture_frame(mut commands: Commands, mut capture: ResMut<Capture>) {
     if capture.path.is_none() || capture.requested {
         return;
