@@ -1,4 +1,4 @@
-//! The room, furniture and articulated avatar, expressed as native mesh data.
+//! The house, furniture and articulated avatars, expressed as native mesh data.
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::f64::consts::PI;
@@ -24,6 +24,7 @@ impl Default for Avatar {
         }
     }
 }
+
 #[derive(Clone, Debug, Serialize)]
 pub struct SceneSpec {
     pub background: u32,
@@ -36,7 +37,6 @@ pub struct SceneSpec {
     pub drops_y: Vec<f64>,
 }
 impl SceneSpec {
-    // This descriptor mirrors geometry, transform, material and shadow options.
     #[allow(clippy::too_many_arguments)]
     fn mesh(
         &mut self,
@@ -49,30 +49,23 @@ impl SceneSpec {
         shadows: [bool; 2],
     ) -> String {
         let id = format!("mesh-{}", self.objects.len());
-        self.objects.push(json!({"id":id,"kind":kind,"args":args,"position":p,"name":name,"material":{"type":"standard","color":color,"roughness":roughness},"cast_shadow":shadows[0],"receive_shadow":shadows[1]}));
+        self.objects.push(json!({
+            "id":id,"kind":kind,"args":args,"position":p,"name":name,
+            "material":{"type":"standard","color":color,"roughness":roughness},
+            "cast_shadow":shadows[0],"receive_shadow":shadows[1]
+        }));
         id
     }
     fn box_mesh(&mut self, z: [f64; 3], p: [f64; 3], c: u32, n: &str) -> String {
         let radius = 0.1_f64.min(z[0].min(z[1]).min(z[2]) * 0.18);
-        self.mesh(
-            "rounded-box",
-            &[z[0], z[1], z[2], 3.0, radius],
-            p,
-            c,
-            0.68,
-            n,
-            [true, true],
-        )
+        self.mesh("rounded-box", &[z[0], z[1], z[2], 3.0, radius], p, c, 0.68, n, [true, true])
     }
     fn cyl(&mut self, r: f64, h: f64, p: [f64; 3], c: u32, n: &str) -> String {
         self.mesh("cylinder", &[r, r, h, 24.0], p, c, 0.65, n, [true, false])
     }
-    pub(crate) fn last(&mut self) -> &mut Value {
-        self.objects.last_mut().unwrap()
-    }
+    pub(crate) fn last(&mut self) -> &mut Value { self.objects.last_mut().unwrap() }
     pub(crate) fn group(&mut self, id: &str, p: [f64; 3], parent: Option<&str>) {
-        self.objects
-            .push(json!({"id":id,"kind":"group","position":p,"parent":parent}));
+        self.objects.push(json!({"id":id,"kind":"group","position":p,"parent":parent}));
     }
     pub(crate) fn person_mesh(
         &mut self,
@@ -83,18 +76,68 @@ impl SceneSpec {
         material: &str,
         parent: &str,
     ) {
-        self.objects.push(json!({"id":id,"kind":kind,"args":args,"position":p,"material_ref":material,"parent":parent,"cast_shadow":true}));
+        self.objects.push(json!({
+            "id":id,"kind":kind,"args":args,"position":p,
+            "material_ref":material,"parent":parent,"cast_shadow":true
+        }));
     }
+}
+
+fn wall_x(s: &mut SceneSpec, width: f64, x: f64, z: f64) {
+    s.box_mesh([width, 3.05, 0.16], [x, 1.47, z], 0xeee4d4, "");
+}
+fn wall_z(s: &mut SceneSpec, depth: f64, x: f64, z: f64) {
+    s.box_mesh([0.16, 3.05, depth], [x, 1.47, z], 0xeee4d4, "");
+}
+fn trim_x(s: &mut SceneSpec, width: f64, x: f64, z: f64) {
+    s.box_mesh([width, 0.13, 0.08], [x, 0.08, z + 0.09], 0x765b48, "");
+}
+fn trim_z(s: &mut SceneSpec, depth: f64, x: f64, z: f64) {
+    s.box_mesh([0.08, 0.13, depth], [x + 0.09, 0.08, z], 0x765b48, "");
+}
+fn flat(s: &mut SceneSpec, size: [f64; 2], at: [f64; 2], color: u32) {
+    s.box_mesh([size[0], 0.055, size[1]], [at[0], 0.015, at[1]], color, "");
+}
+fn plant(s: &mut SceneSpec, x: f64, z: f64, scale: f64) {
+    s.cyl(0.34 * scale, 0.46 * scale, [x, 0.24 * scale, z], 0x8b674f, "");
+    for (i, (dx, dz)) in [(-0.18,0.03),(0.13,-0.08),(0.02,0.16),(-0.04,-0.18),(0.18,0.13)].into_iter().enumerate() {
+        s.mesh("sphere", &[0.24 * scale, 12.0, 8.0],
+            [x + dx * scale, 0.82 * scale + (i as f64 * 0.07), z + dz * scale],
+            0x56785d, 0.95, "", [false, false]);
+        s.last()["scale"] = json!([0.78, 1.65, 0.55]);
+        s.last()["rotation"] = json!([0.0, 0.0, (i as f64 - 2.0) * 0.22]);
+    }
+}
+fn lamp(s: &mut SceneSpec, x: f64, z: f64) {
+    s.cyl(0.08, 1.5, [x, 0.76, z], 0x554d47, "");
+    s.cyl(0.34, 0.36, [x, 1.62, z], 0xe8d2a6, "");
+}
+fn picture(s: &mut SceneSpec, x: f64, y: f64, z: f64, width: f64, color: u32) {
+    s.box_mesh([width + 0.14, 1.10, 0.08], [x, y, z], 0x654d3e, "");
+    s.box_mesh([width, 0.92, 0.035], [x, y, z + 0.06], color, "");
+}
+fn simple_bed(s: &mut SceneSpec, x: f64, z: f64, interactive: bool) {
+    let name = if interactive { "bed" } else { "" };
+    s.box_mesh([2.70, 0.34, 3.35], [x, 0.34, z], 0x725b4c, name);
+    s.box_mesh([2.52, 0.42, 3.12], [x, 0.68, z], 0xd9d0c3, name);
+    s.box_mesh([2.54, 0.11, 2.05], [x, 0.92, z - 0.28], 0x9f776c, name);
+    s.box_mesh([1.02, 0.18, 0.62], [x - 0.58, 0.98, z + 1.18], 0xf4eee3, name);
+    s.box_mesh([1.02, 0.18, 0.62], [x + 0.58, 0.98, z + 1.18], 0xf4eee3, name);
+    s.box_mesh([2.78, 1.05, 0.16], [x, 0.90, z + 1.72], 0x60483c, name);
 }
 
 pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     let mut s = SceneSpec {
-        background: 0x9ec7d0,
+        background: 0x9fc8cf,
         fog: [25.0, 44.0],
-        camera: json!({"bounds":[-10,10,7,-7],"near":0.1,"far":100,"position":[15,17,18],"look_at":[0,0,0],"resize":{"min_vertical":8.5,"min_horizontal":11.5}}),
+        camera: json!({
+            "bounds":[-10,10,7,-7],"near":0.1,"far":100,
+            "position":[15,17,18],"look_at":[0,0,0],
+            "resize":{"min_vertical":8.5,"min_horizontal":11.5}
+        }),
         lights: vec![
-            json!({"kind":"hemisphere","sky":0xfff6df,"ground":0x4d6972,"intensity":2.5}),
-            json!({"kind":"directional","color":0xfff0cf,"intensity":3.3,"position":[-8,16,10],"cast_shadow":true,"shadow_size":[2048,2048]}),
+            json!({"kind":"hemisphere","sky":0xfff7e7,"ground":0x536a72,"intensity":2.5}),
+            json!({"kind":"directional","color":0xffefd0,"intensity":3.3,"position":[-8,16,10],"cast_shadow":true,"shadow_size":[2048,2048]}),
         ],
         materials: json!({
             "skin":{"type":"standard","color":avatar.skin,"roughness":0.62},
@@ -104,119 +147,136 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
             "eyes":{"type":"standard","color":0x1b2529},
             "shoes":{"type":"standard","color":0x3a332e},
         }),
-        objects: vec![],
-        obstacles: vec![],
-        drops_y: vec![],
+        objects: vec![], obstacles: vec![], drops_y: vec![],
     };
-    let floor = s.box_mesh([15.0, 0.35, 11.0], [0.0, -0.22, 0.0], 0xd6bd92, "");
+
+    // Shell: the same physical footprint remains navigable, but the layout is now
+    // a complete, furnished house rather than one compressed open room.
+    let floor = s.box_mesh([15.0, 0.34, 11.0], [0.0, -0.22, 0.0], 0xc9ad82, "");
     s.last()["id"] = json!("floor");
     for i in -7..=7 {
-        s.box_mesh([0.035, 0.02, 10.5], [i as f64, -0.035, 0.0], 0xb59b76, "");
+        s.box_mesh([0.028, 0.018, 10.6], [i as f64, -0.035, 0.0], 0xa88b68, "");
     }
-    s.box_mesh([0.25, 4.5, 11.0], [-7.45, 2.1, 0.0], 0xf1dfc4, "");
-    s.box_mesh([15.0, 4.5, 0.25], [0.0, 2.1, -5.45], 0xead7bc, "");
-    s.box_mesh([5.2, 0.06, 3.4], [2.0, 0.04, 1.1], 0x557d7b, "");
-    s.box_mesh([4.4, 0.32, 1.35], [3.5, 0.32, 3.2], 0xc89066, "");
-    s.box_mesh([4.4, 0.68, 0.26], [3.5, 0.7, 3.72], 0xb67854, "");
-    s.box_mesh([2.5, 0.22, 1.25], [2.0, 0.35, 0.55], 0x9b6c43, "");
-    for x in [1.05, 2.95] {
-        s.box_mesh([0.18, 0.6, 0.18], [x, 0.12, 0.15], 0x604430, "");
-    }
-    s.box_mesh([3.7, 0.45, 1.05], [2.0, 0.65, -3.92], 0x73563e, "");
-    s.box_mesh([3.25, 2.05, 0.28], [2.0, 1.9, -4.18], 0x24272d, "tv");
-    s.box_mesh([2.75, 1.5, 0.03], [2.0, 1.9, -4.02], 0x315d71, "tv");
-    for (z, p, c) in [
-        ([2.8, 0.42, 3.65], [-4.6, 0.44, 2.65], 0x815942),
-        ([2.6, 0.35, 3.4], [-4.6, 0.79, 2.65], 0xe0d2b8),
-        ([2.62, 0.12, 2.25], [-4.6, 1.0, 2.15], 0x9b675b),
-        ([1.1, 0.18, 0.58], [-4.6, 1.05, 3.8], 0xf2e7d3),
-        ([2.85, 0.9, 0.16], [-4.6, 1.05, 4.4], 0x73513c),
-    ] {
-        s.box_mesh(z, p, c, "bed");
-    }
-    s.box_mesh([1.3, 1.7, 1.2], [-6.25, 0.85, 0.6], 0x73513c, "");
-    s.box_mesh([1.3, 0.08, 1.2], [-6.25, 1.74, 0.6], 0xd6b873, "");
-    s.box_mesh([5.2, 0.08, 3.35], [-4.65, 0.02, -3.45], 0xbad0cf, "");
-    s.box_mesh([0.18, 3.5, 3.6], [-2.12, 1.7, -3.62], 0xe4ece8, "");
-    s.box_mesh([1.2, 1.05, 0.18], [-6.65, 0.5, -1.7], 0xe4ece8, "");
-    s.box_mesh([1.2, 1.05, 0.18], [-2.72, 0.5, -1.7], 0xe4ece8, "");
-    s.box_mesh([2.15, 0.2, 1.7], [-5.75, 0.12, -4.25], 0xf4f6f2, "shower");
-    s.mesh(
-        "box",
-        &[0.06, 2.7, 1.8],
-        [-5.0, 1.4, -4.35],
-        0xbfe0e5,
-        0.1,
-        "shower",
-        [false, false],
-    );
-    s.last()["id"] = json!("glass");
-    s.last()["material"] = json!({"type":"physical","color":0xbfe0e5,"transparent":true,"opacity":0.35,"roughness":0.1});
-    s.cyl(0.09, 2.3, [-6.65, 1.25, -4.9], 0xb4b8b5, "shower");
-    s.cyl(0.38, 0.08, [-6.3, 2.35, -4.9], 0xb4b8b5, "shower");
-    s.last()["id"] = json!("shower-head");
-    s.last()["rotation"] = json!([0, 0, PI / 2.0]);
-    s.box_mesh([0.62, 0.38, 0.72], [-3.65, 0.28, -4.3], 0xf4f2e9, "toilet");
-    s.cyl(0.36, 0.16, [-3.65, 0.45, -4.2], 0xf4f2e9, "toilet");
-    s.box_mesh([0.72, 0.65, 0.25], [-3.65, 0.75, -4.8], 0xf4f2e9, "toilet");
-    s.box_mesh([0.9, 0.18, 0.6], [-2.85, 0.95, -2.5], 0xf5f2e9, "sink");
-    s.cyl(0.10, 0.85, [-2.85, 0.45, -2.5], 0xb9b5aa, "");
-    s.box_mesh([0.75, 0.85, 0.08], [-2.22, 1.85, -2.6], 0x91b8bd, "");
-    s.box_mesh([2.3, 1.9, 0.18], [-2.7, 2.5, -5.27], 0x6f5241, "");
-    s.box_mesh([1.9, 1.5, 0.03], [-2.7, 2.5, -5.38], 0xe4b663, "");
-    s.cyl(0.48, 0.55, [6.3, 0.3, -4.25], 0x9d6c4e, "");
-    for i in 0..7 {
-        let i = i as f64;
-        s.mesh(
-            "sphere",
-            &[0.22, 12.0, 8.0],
-            [
-                6.3 + i.sin() * 0.45,
-                1.0 + (i * 0.8).cos() * 0.35,
-                -4.25 + i.cos() * 0.4,
-            ],
-            0x4f8056,
-            1.0,
-            "",
-            [false, false],
-        );
-        // MeshStandardMaterial defaults to roughness=1, as in the reference.
-        s.last()["scale"] = json!([0.7, 2.0, 0.45]);
-        s.last()["rotation"] = json!([0, 0, i.sin() * 0.7]);
-    }
-    s.box_mesh([3.8, 0.9, 0.72], [4.9, 0.46, -2.05], 0xb6c5b7, "");
-    s.box_mesh([1.45, 2.85, 0.82], [6.35, 1.45, -2.08], 0xe8e7dc, "");
-    s.box_mesh([1.15, 1.65, 0.05], [6.35, 1.75, -1.65], 0xc4d5d7, "");
-    s.box_mesh([1.8, 0.92, 0.75], [3.05, 0.47, -2.05], 0x8fa78f, "");
-    s.cyl(0.32, 0.08, [3.05, 0.97, -2.15], 0x31383b, "");
-    s.box_mesh([0.7, 0.12, 0.5], [5.05, 0.98, -2.1], 0x30383a, "");
-    for x in [3.8, 4.9, 5.8] {
-        s.box_mesh([0.025, 0.5, 0.03], [x, 0.48, -1.66], 0x6f8075, "");
-    }
-    s.cyl(1.05, 0.18, [5.15, 0.72, 0.25], 0xa77a54, "");
-    s.cyl(0.16, 1.25, [5.15, 0.16, 0.25], 0x604a37, "");
-    for (x, z) in [(4.1, 0.25), (6.2, 0.25), (5.15, -0.82), (5.15, 1.32)] {
-        s.box_mesh([0.72, 0.15, 0.72], [x, 0.48, z], 0xc38c62, "");
-        s.cyl(0.1, 0.88, [x, 0.04, z], 0x6e4c36, "");
-    }
-    s.box_mesh([3.1, 1.65, 0.1], [3.6, 2.8, -5.27], 0xf4ead8, "");
-    s.box_mesh([2.55, 1.18, 0.035], [3.6, 2.8, -5.20], 0x86b7c2, "");
-    s.box_mesh([0.08, 1.18, 0.05], [3.6, 2.8, -5.16], 0xe9f1ef, "");
-    s.box_mesh([2.55, 0.07, 0.05], [3.6, 2.8, -5.16], 0xe9f1ef, "");
-    s.cyl(0.5, 0.35, [0.2, 2.9, 0.1], 0xe5c981, "");
-    s.cyl(0.04, 2.6, [0.2, 1.45, 0.1], 0x544d45, "");
-    s.lights.push(json!({"kind":"point","color":0xffd89b,"intensity":18,"distance":8,"position":[0.2,2.7,0.1],"after_objects":s.objects.len()}));
+    wall_z(&mut s, 11.0, -7.45, 0.0);
+    wall_x(&mut s, 15.0, 0.0, -5.45);
+    trim_z(&mut s, 10.8, -7.34, 0.0);
+    trim_x(&mut s, 14.7, 0.0, -5.34);
 
-    // Select the same candidates at the same construction stage as the original.
+    // Large windows and framed wall art break up the long exterior walls.
+    for x in [-4.9, 0.0, 4.9] {
+        s.box_mesh([2.35, 1.45, 0.05], [x, 2.10, -5.30], 0x90b8c1, "");
+        s.last()["material"] = json!({"type":"physical","color":0x9bc8d1,"transparent":true,"opacity":0.42,"roughness":0.08});
+        s.box_mesh([2.55, 0.08, 0.08], [x, 1.36, -5.24], 0xf0e8db, "");
+        s.box_mesh([0.08, 1.60, 0.08], [x, 2.10, -5.24], 0xf0e8db, "");
+    }
+    s.box_mesh([0.05, 1.45, 2.35], [-7.30, 2.10, 3.65], 0x90b8c1, "");
+    s.last()["material"] = json!({"type":"physical","color":0x9bc8d1,"transparent":true,"opacity":0.42,"roughness":0.08});
+
+    // MASTER BEDROOM — generous room with wardrobe, seating and bedside furniture.
+    wall_z(&mut s, 4.10, -2.05, 3.30);
+    wall_x(&mut s, 3.80, -5.40, 1.25);
+    wall_x(&mut s, 0.48, -2.29, 1.25);
+    trim_z(&mut s, 3.92, -1.95, 3.30);
+    trim_x(&mut s, 3.62, -5.40, 1.36);
+    flat(&mut s, [4.45, 3.55], [-4.75, 3.30], 0xb4a68d);
+    simple_bed(&mut s, -4.60, 2.82, true);
+    for x in [-6.35, -2.92] {
+        s.box_mesh([0.72, 0.70, 0.72], [x, 0.36, 3.92], 0x765948, "");
+        s.cyl(0.18, 0.42, [x, 1.02, 3.92], 0xd3b879, "");
+    }
+    s.box_mesh([1.55, 2.35, 0.72], [-6.35, 1.18, 5.00], 0x806653, "");
+    s.box_mesh([1.18, 2.08, 0.05], [-6.35, 1.20, 4.60], 0x9d8065, "");
+    s.box_mesh([1.15, 0.45, 0.58], [-2.78, 0.33, 4.62], 0xb78d70, "");
+    picture(&mut s, -5.35, 2.20, -5.27, 1.25, 0xc08a74);
+
+    // SECOND BEDROOM / STUDY — visually reads as another real room rather than a corridor.
+    wall_z(&mut s, 3.25, 1.28, 3.78);
+    wall_x(&mut s, 2.02, -0.65, 2.10);
+    wall_x(&mut s, 0.52, 1.02, 2.10);
+    flat(&mut s, [2.85, 2.85], [-0.30, 3.75], 0xb8b1a2);
+    simple_bed(&mut s, -0.18, 4.10, false);
+    s.box_mesh([1.42, 0.13, 0.62], [-1.15, 0.76, 2.76], 0x8f674b, "");
+    for x in [-1.72, -0.58] { s.cyl(0.07, 0.76, [x, 0.39, 2.76], 0x5d4a3c, ""); }
+    s.box_mesh([0.65, 0.72, 0.65], [-1.12, 0.37, 3.48], 0x71847a, "");
+
+    // BATHROOM — full wet room with separate shower, toilet and vanity.
+    flat(&mut s, [5.10, 3.08], [-4.70, -3.72], 0xbecfd0);
+    wall_z(&mut s, 3.12, -2.10, -3.80);
+    wall_x(&mut s, 1.00, -6.82, -2.22);
+    wall_x(&mut s, 3.20, -3.70, -2.22);
+    s.box_mesh([2.25, 0.18, 1.72], [-5.78, 0.10, -4.30], 0xf4f6f2, "shower");
+    s.mesh("box", &[0.06, 2.48, 1.86], [-5.00, 1.29, -4.28], 0xbfe0e5, 0.1, "shower", [false, false]);
+    s.last()["id"] = json!("glass");
+    s.last()["material"] = json!({"type":"physical","color":0xbfe0e5,"transparent":true,"opacity":0.34,"roughness":0.08});
+    s.cyl(0.07, 2.10, [-6.52, 1.14, -4.82], 0xb4b8b5, "shower");
+    s.cyl(0.32, 0.08, [-6.22, 2.17, -4.82], 0xb4b8b5, "shower");
+    s.last()["rotation"] = json!([0.0, 0.0, PI / 2.0]);
+    s.box_mesh([0.62, 0.38, 0.72], [-3.65, 0.28, -4.28], 0xf4f2e9, "toilet");
+    s.cyl(0.36, 0.16, [-3.65, 0.45, -4.17], 0xf4f2e9, "toilet");
+    s.box_mesh([0.72, 0.65, 0.25], [-3.65, 0.75, -4.82], 0xf4f2e9, "toilet");
+    s.box_mesh([1.10, 0.72, 0.62], [-2.75, 0.38, -3.05], 0x8c755f, "");
+    s.box_mesh([1.14, 0.14, 0.66], [-2.75, 0.78, -3.05], 0xf2eee5, "");
+    s.cyl(0.25, 0.12, [-2.75, 0.88, -3.05], 0xf8f7f1, "");
+    s.box_mesh([0.92, 1.18, 0.06], [-2.15, 1.67, -3.12], 0x8fb5ba, "");
+
+    // LIVING ROOM — oversized rug, deep sofa, coffee table, media wall and reading corner.
+    flat(&mut s, [5.25, 3.75], [3.55, 2.87], 0x718987);
+    s.box_mesh([4.25, 0.38, 1.38], [3.35, 0.38, 3.42], 0x9cae9f, "");
+    s.box_mesh([4.00, 0.72, 0.30], [3.35, 0.80, 4.00], 0x87998b, "");
+    s.box_mesh([1.18, 0.34, 1.36], [5.58, 0.42, 3.42], 0x9cae9f, "");
+    s.box_mesh([2.20, 0.22, 1.05], [3.30, 0.28, 2.12], 0x8a674e, "");
+    s.box_mesh([1.84, 0.06, 0.78], [3.30, 0.41, 2.12], 0xb89672, "");
+    s.box_mesh([3.72, 0.50, 0.48], [2.60, 0.35, 0.66], 0x6c5548, "tv");
+    s.box_mesh([3.35, 2.08, 0.22], [2.60, 1.65, 0.54], 0x292b2e, "tv");
+    s.box_mesh([2.92, 1.62, 0.035], [2.60, 1.65, 0.40], 0x17212b, "tv");
+    s.last()["id"] = json!("tv-screen");
+    s.last()["name"] = json!("tv");
+    lamp(&mut s, 6.35, 4.45);
+    plant(&mut s, 6.48, 1.08, 0.95);
+
+    // KITCHEN — long run of cabinetry plus an island. The sink remains the host's Eat target.
+    flat(&mut s, [7.05, 3.18], [3.72, -3.55], 0xc9c5b9);
+    s.box_mesh([5.90, 0.88, 0.76], [3.80, 0.45, -4.68], 0x839287, "");
+    s.box_mesh([5.96, 0.11, 0.84], [3.80, 0.95, -4.68], 0xeee9df, "");
+    for x in [1.35, 2.62, 3.89, 5.16] {
+        s.box_mesh([0.035, 0.66, 0.04], [x, 0.47, -4.28], 0x65736b, "");
+    }
+    s.box_mesh([1.48, 2.45, 0.92], [6.38, 1.22, -4.35], 0xe5e6df, "");
+    s.box_mesh([1.10, 1.62, 0.05], [6.38, 1.56, -3.86], 0xbccfd0, "");
+    s.box_mesh([2.90, 0.82, 0.92], [3.05, 0.43, -2.16], 0x73857b, "sink");
+    s.box_mesh([2.98, 0.10, 1.00], [3.05, 0.89, -2.16], 0xf0ede5, "sink");
+    s.cyl(0.29, 0.10, [2.46, 0.96, -2.16], 0xaeb7b5, "sink");
+    s.cyl(0.045, 0.42, [2.62, 1.20, -2.34], 0x9ca5a3, "sink");
+    s.box_mesh([0.54, 0.10, 0.36], [3.76, 0.99, -2.16], 0x292e2f, "");
+    for x in [2.15, 3.05, 3.95] {
+        s.box_mesh([0.52, 0.12, 0.52], [x, 0.52, -1.18], 0xb78665, "");
+        s.cyl(0.075, 0.82, [x, 0.09, -1.18], 0x624b3c, "");
+    }
+
+    // DINING / ENTRY — a proper table gives the centre of the house a second social area.
+    s.box_mesh([3.28, 0.18, 1.48], [5.00, 0.78, -0.18], 0xa27856, "");
+    for (x, z) in [(3.72,-0.18),(6.28,-0.18),(5.00,-1.16),(5.00,0.80)] {
+        s.box_mesh([0.72, 0.14, 0.72], [x, 0.52, z], 0xc08b68, "");
+        s.cyl(0.08, 0.88, [x, 0.07, z], 0x684d3a, "");
+    }
+    s.box_mesh([1.42, 0.48, 0.44], [-0.82, 0.32, -0.10], 0x806653, "");
+    s.box_mesh([1.22, 1.10, 0.06], [-0.82, 1.22, -0.34], 0x9eb7b5, "");
+    plant(&mut s, -1.35, -1.20, 0.75);
+
+    // Decorative lighting and artwork make the interior feel inhabited.
+    s.cyl(0.50, 0.28, [0.15, 2.92, 0.15], 0xe4c680, "");
+    s.cyl(0.04, 2.55, [0.15, 1.47, 0.15], 0x554d45, "");
+    picture(&mut s, 4.90, 2.25, -5.27, 1.42, 0x8da29b);
+
+    s.lights.push(json!({
+        "kind":"point","color":0xffd89b,"intensity":18,"distance":8,
+        "position":[0.15,2.72,0.15],"after_objects":s.objects.len()
+    }));
+
     for node in &s.objects {
         let id = node["id"].as_str().unwrap();
         let y = node["position"][1].as_f64().unwrap();
-        if id != floor
-            && id != "floor"
-            && id != "shower-head"
-            && y > 0.1
-            && y < 2.0
-        {
+        if id != floor && id != "floor" && id != "shower-head" && y > 0.1 && y < 2.0 {
             s.obstacles.push(id.into());
         }
     }
@@ -225,28 +285,20 @@ pub fn build(avatar: &Avatar, random: &[f64]) -> SceneSpec {
     for (id, resident, position) in residents() {
         crate::human::append(&mut s, &resident, &format!("npc-{id}/"), position, false);
     }
-    s.box_mesh([2.85, 1.65, 0.035], [2.0, 1.9, -4.01], 0x17212b, "tv");
-    s.last()["id"] = json!("tv-screen");
+
     s.group("drops", [0.0; 3], None);
     s.last()["visible"] = json!(false);
     for i in 0..30_usize {
         let sample = |j: usize| random.get(i * 3 + j).copied().unwrap_or(0.5);
         let y = sample(1) * 2.4;
         s.drops_y.push(y);
-        s.mesh(
-            "sphere",
-            &[0.025, 6.0, 4.0],
+        s.mesh("sphere", &[0.025, 6.0, 4.0],
             [-6.3 + sample(0) * 0.7, y, -4.7 + sample(2) * 0.7],
-            0x98d6f6,
-            1.0,
-            "",
-            [false, false],
-        );
+            0x98d6f6, 1.0, "", [false, false]);
         s.last()["id"] = json!(format!("drop-{i}"));
         s.last()["parent"] = json!("drops");
         s.last()["scale"] = json!([1, 4, 1]);
-        s.last()["material"] =
-            json!({"type":"basic","color":0x98d6f6,"transparent":true,"opacity":0.65});
+        s.last()["material"] = json!({"type":"basic","color":0x98d6f6,"transparent":true,"opacity":0.65});
     }
     s
 }
