@@ -30,8 +30,8 @@ mspa::DomainPack house_pack() {
     pack.metadata.id = mspa::PackId{1};
     pack.metadata.name_space = domain;
     pack.metadata.name = "mens-life.house";
-    pack.context_tags = {"house", "care", "leisure", "interrupted"};
-    pack.outcome_tags = {"success", "blocked", "need_restored"};
+    pack.context_tags = {"house", "care", "leisure", "interrupted", "environment"};
+    pack.outcome_tags = {"success", "blocked", "need_restored", "noticed"};
     for (uint64_t i = 0; i < 5; ++i) {
         const auto concept = mspa::ConceptId{i + 1};
         pack.concepts.push_back({concept, names[i]});
@@ -43,7 +43,6 @@ mspa::DomainPack house_pack() {
             schema.name_space = domain;
             schema.required_roles = {"subject"};
             schema.related_concepts = {concept};
-            // Need discomfort, critical need, activity begun, success, failure, interruption.
             const float consequences[] = {-0.35f, -0.85f, 0.06f, 0.65f, -0.65f, -0.08f};
             schema.default_consequence = consequences[kind - 1];
             schema.default_relevance = kind == 2 ? 0.95f : kind == 3 ? 0.2f : 0.65f;
@@ -68,6 +67,18 @@ mspa::DomainPack house_pack() {
         schema.intentionality = 0.65f;
         pack.predicates.push_back(std::move(schema));
     }
+    const float environmental_consequence[] = {0.03f, 0.14f, 0.05f, 0.10f, -0.03f};
+    for (uint64_t i = 0; i < 5; ++i) {
+        mspa::PredicateSchema schema;
+        schema.id = mspa::PredicateId{1200+i};
+        schema.name_space = domain;
+        schema.required_roles = {"subject"};
+        schema.related_concepts = {mspa::ConceptId{i+1}};
+        schema.default_relevance = 0.32f;
+        schema.default_consequence = environmental_consequence[i];
+        schema.intentionality = 0.0f;
+        pack.predicates.push_back(std::move(schema));
+    }
     return pack;
 }
 }
@@ -81,7 +92,6 @@ struct ml_brain {
     mspa::PsychTime now{};
     uint64_t sequence{0};
     float confidence{0};
-    // Error storage never allocates, including while handling std::bad_alloc.
     std::array<char, 512> error{};
 
     mspa::Proposition proposition(int task, int kind, bool positive = true) const {
@@ -132,7 +142,6 @@ extern "C" ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, cha
         mspa::RuntimeConfig config;
         config.runtime_id = mspa::RuntimeId{agent_id};
         config.world_id = world;
-        // One logical tick per simulation millisecond. Pauses never advance it.
         config.time_domain = {mspa::TimeDomainId{1}, {1000, 1}};
         config.seed_root = seed;
         config.limits.max_agents = 1;
@@ -173,7 +182,6 @@ extern "C" ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, cha
 extern "C" ml_brain* ml_brain_create(uint64_t seed, char* error, size_t capacity) noexcept {
     return ml_brain_create_agent(seed, 1, error, capacity);
 }
-
 extern "C" void ml_brain_destroy(ml_brain* brain) noexcept { delete brain; }
 
 extern "C" int32_t ml_brain_update(ml_brain* brain, uint64_t ticks, const float values[5]) noexcept {
@@ -252,7 +260,6 @@ extern "C" int32_t ml_brain_event(ml_brain* brain, int32_t task, int32_t kind) n
         if (kind == 0) {
             brain->observe(task, 3);
         } else if (kind == 3) {
-            // A player interruption is an observation, never fabricated failure evidence.
             brain->observe(task, 6);
         } else {
             mspa::ReportInput report;
@@ -266,10 +273,30 @@ extern "C" int32_t ml_brain_event(ml_brain* brain, int32_t task, int32_t kind) n
             report.resulting_propositions.push_back(brain->proposition(task, kind == 1 ? 4 : 5));
             require(brain->runtime->report(report));
         }
-        if (kind != 0) {
-            // End continuity after a real completion/cancellation, so it cannot bias the next task.
-            require(brain->runtime->decide(brain->character, {}, brain->now));
-        }
+        if (kind != 0) require(brain->runtime->decide(brain->character, {}, brain->now));
+    });
+}
+
+extern "C" int32_t ml_brain_environment(ml_brain* brain, int32_t kind, float salience) noexcept {
+    if (!brain || kind < 0 || kind >= 5 || !std::isfinite(salience)) return 0;
+    return brain->guarded([&] {
+        mspa::Proposition p;
+        p.predicate = mspa::PredicateId{uint64_t(1200 + kind)};
+        p.name_space = domain;
+        p.positive = true;
+        p.provenance = "mens-life:environment-perception";
+        mspa::PropositionArg subject;
+        subject.role = "subject";
+        subject.has_agent = true;
+        subject.agent = brain->character;
+        p.arguments.push_back(std::move(subject));
+        mspa::ObserveInput input;
+        input.agent = brain->character;
+        input.proposition = std::move(p);
+        input.time.process_time = brain->now;
+        input.perceived_certainty = std::clamp(salience, 0.0f, 1.0f);
+        input.source_trust = 0.75f;
+        require(brain->runtime->observe(input));
     });
 }
 
@@ -286,6 +313,19 @@ extern "C" int32_t ml_brain_state(const ml_brain* brain, ml_psych_state* output)
     output->memories = static_cast<uint32_t>(state->memories.size());
     output->beliefs = static_cast<uint32_t>(state->beliefs.size());
     output->learned_patterns = static_cast<uint32_t>(state->learned_expectations.size());
+    output->personality[0] = state->personality.sociability;
+    output->personality[1] = state->personality.stability;
+    output->personality[2] = state->personality.empathy;
+    output->personality[3] = state->personality.persistence;
+    output->personality[4] = state->personality.curiosity;
+    output->personality[5] = state->personality.boldness;
+    const auto derived = mspa::PersonalitySystem{}.derive(state->personality);
+    output->derived_traits[0] = derived.belief_rigidity;
+    output->derived_traits[1] = derived.goal_persistence;
+    output->derived_traits[2] = derived.switch_resistance;
+    output->derived_traits[3] = derived.threat_sensitivity;
+    output->derived_traits[4] = derived.social_sensitivity;
+    output->derived_traits[5] = derived.exploration;
     return 1;
 }
 
