@@ -1,98 +1,26 @@
-//! Regression data captured from the original project, independent of the Rust
-//! implementation. Includes all five activities and interruption/pause cases.
+//! The original navigation is preserved; autonomous choices now belong to MSPA.
+//! UI controls and the physical navigation reference stay independently covered.
 use bevy_egui::egui;
 use mens_life::{
-    game::{Game, Navigation, Task, Vec3},
+    game::{Game, Navigation, Task},
     geometry,
     scene::{self, Avatar},
     ui,
 };
-use serde_json::{Value, json};
+use serde_json::Value;
 
-fn snapshot(g: &Game) -> Value {
-    json!({"values":g.values,"path":g.path,"task":g.task.map(Task::key).unwrap_or(""),"phase":g.phase,"elapsed":g.elapsed,"decisionIn":g.decision_in,"uiTime":g.ui_time,"gameTime":g.game_time,"walkTime":g.walk_time,"action":g.action,"position":g.frame.position,"rotation":g.frame.rotation,"legs":g.frame.legs,"arms":g.frame.arms,"plumb":g.frame.plumb,"drops":g.frame.drops,"dropsY":g.drops_y,"watching":g.frame.watching,"screenHue":g.frame.screen_hue,"displayedValues":g.displayed_values,"displayedClock":g.displayed_clock,"needsVisible":g.needs_visible})
-}
-fn close(a: &Value, b: &Value, path: &str) {
-    match b {
-        Value::Number(n) => {
-            let expected = n.as_f64().unwrap();
-            let actual = a.as_f64().unwrap();
-            assert!(
-                (actual - expected).abs() <= 1e-9,
-                "{path}: native {actual}, original {expected}"
-            );
-        }
-        Value::Array(values) => {
-            assert_eq!(a.as_array().unwrap().len(), values.len(), "{path}");
-            for (i, b) in values.iter().enumerate() {
-                close(&a[i], b, &format!("{path}[{i}]"));
-            }
-        }
-        Value::Object(values) => {
-            assert_eq!(a.as_object().unwrap().len(), values.len(), "{path}");
-            for (k, b) in values {
-                close(&a[k], b, &format!("{path}.{k}"));
-            }
-        }
-        _ => assert_eq!(a, b, "{path}"),
-    }
-}
 #[test]
-fn native_meshes_preserve_navigation_and_reference_gameplay() {
+fn native_meshes_preserve_reference_navigation() {
     let reference: Value =
         serde_json::from_str(include_str!("reference/native-replay.json")).unwrap();
     let random: Vec<f64> = serde_json::from_value(reference["random"].clone()).unwrap();
     let spec = scene::build(&Avatar::default(), &random);
-    let bounds = geometry::navigation_bounds(&spec);
-    let mut game = Game::new(Navigation::new(bounds), spec.drops_y);
-    let differences: Vec<_> = game
-        .navigation
-        .free
-        .iter()
-        .enumerate()
-        .filter(|(i, free)| Some(**free) != reference["free"][*i].as_bool())
-        .map(|(i, _)| (i, Navigation::point(i)))
-        .collect();
-    assert!(
-        differences.is_empty(),
-        "Native navigation differs at {} cells: {:?}",
-        differences.len(),
-        differences.iter().take(12).collect::<Vec<_>>()
-    );
-    let checkpoints = reference["checkpoints"].as_array().unwrap();
-    let mut cp = 0;
-    let mut index = 0;
-    for op in reference["ops"].as_array().unwrap() {
-        let count = op["count"].as_u64().unwrap_or(1);
-        for frame in 0..count {
-            match op["kind"].as_str().unwrap() {
-                "command" => game.command(Task::parse(op["task"].as_str().unwrap()).unwrap()),
-                "walk" => {
-                    game.walk_to(serde_json::from_value::<Vec3>(op["point"].clone()).unwrap())
-                }
-                "paused" => game.paused = op["value"].as_bool().unwrap(),
-                "creator" => game.creator = op["value"].as_bool().unwrap(),
-                "values" => game.values = serde_json::from_value(op["value"].clone()).unwrap(),
-                "frames" => {
-                    let dt = op["dt"].as_f64().unwrap();
-                    game.tick(dt, op["now"].as_f64().unwrap() + frame as f64 * dt * 1000.0);
-                }
-                _ => panic!("Unknown reference event"),
-            }
-            if cp < checkpoints.len() && checkpoints[cp]["index"].as_u64() == Some(index) {
-                close(
-                    &snapshot(&game),
-                    &checkpoints[cp]["state"],
-                    &format!("operation {index}"),
-                );
-                cp += 1;
-            }
-            index += 1;
-        }
+    let navigation = Navigation::new(geometry::navigation_bounds(&spec));
+    for (index, free) in navigation.free.iter().enumerate() {
+        assert_eq!(Some(*free), reference["free"][index].as_bool(), "cell {index}");
     }
-    assert_eq!(index, 12065);
-    assert_eq!(cp, checkpoints.len());
 }
+
 fn frame(ctx: &egui::Context, game: &mut Game, avatar: &mut Avatar, events: Vec<egui::Event>) {
     let input = egui::RawInput {
         screen_rect: Some(egui::Rect::from_min_size(

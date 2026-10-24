@@ -1,0 +1,12 @@
+#include "mspa/psychology/engine.hpp"
+#include "mspa/psychology/beliefs.hpp"
+#include "mspa/psychology/emotions.hpp"
+#include "mspa/psychology/memory.hpp"
+#include "mspa/psychology/mood.hpp"
+#include "mspa/semantics/inference.hpp"
+#include <algorithm>
+namespace mspa {
+Result<bool>PsychologyEngine::observe(AgentPsychState&a,const Proposition&p,PsychTime process,PsychTime event,bool has_event,const RegistrySnapshot&r,AppraisalResult*out,const ObservePsychologyConfig&cfg)const{if(!a.id.valid())return make_error(ErrorCode::InvalidArgument,"invalid agent");if(process<a.last_processed_time)return make_error(ErrorCode::TimeRegression,"process_time regressed");auto valid=validate_proposition(p,r);if(!valid)return *valid.error_if();BeliefEvidence ev{};ev.proposition=p;ev.strength=cfg.perceived_certainty;ev.source_trust=cfg.source_trust;ev.source=cfg.source;ev.source_agent=cfg.source_agent;ev.observed_at=process;AppraisalContext ac{};ac.perceived_certainty=cfg.perceived_certainty;auto appraisal=AppraisalEngine{}.evaluate(a,p,r,ac);ev.emotional_load=appraisal.consequence*appraisal.relevance;if(a.beliefs.size()>=cfg.max_beliefs&&!BeliefSystem{}.find(a,p))return make_error(ErrorCode::QuotaExceeded,"belief quota exceeded");auto bu=BeliefSystem{}.update(a,ev);if(!bu)return *bu.error_if();EmotionSystem{}.apply(a,appraisal,process);MoodSystem{}.absorb_emotions(a,process);if(a.memories.size()>=cfg.max_memories)MemorySystem{}.compact(a,cfg.max_memories>0?cfg.max_memories-1:0);if(cfg.max_memories>0){auto m=MemorySystem{}.remember(a,p,std::clamp(0.3f+0.5f*appraisal.relevance+0.2f*std::abs(appraisal.consequence),0.0f,1.0f),has_event?event:process,ev.emotional_load,cfg.perceived_certainty,cfg.source);if(!m)return *m.error_if();}
+std::vector<Proposition>facts;facts.reserve(a.beliefs.size());for(const auto&b:a.beliefs)if(b.certainty>=0.5f)facts.push_back(b.proposition);InferenceBudget budget{cfg.inference_max_rules,cfg.inference_max_hypotheses,cfg.inference_max_depth};auto inferred=InferenceEngine::infer_registry_rules(facts,r,budget);if(!inferred)return *inferred.error_if();for(const auto&h:*inferred.value_if()){if(a.beliefs.size()>=cfg.max_beliefs)break;BeliefEvidence ie{};ie.proposition=h.proposition;ie.strength=h.certainty;ie.source_trust=1.0f;ie.source=BeliefSource::Inference;ie.observed_at=process;auto q=BeliefSystem{}.update(a,ie);if(!q)return *q.error_if();}
+a.last_processed_time=process;if(out)*out=appraisal;return true;}
+}

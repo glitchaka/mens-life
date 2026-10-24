@@ -16,6 +16,8 @@ jobs:
           New-Item -ItemType Directory -Force artifacts/mens-life-windows-x64/assets/fonts
           Copy-Item target/release/mens-life.exe, README.md, THIRD_PARTY.md artifacts/mens-life-windows-x64/
           Copy-Item assets/fonts/*.txt artifacts/mens-life-windows-x64/assets/fonts/
+          New-Item -ItemType Directory -Force artifacts/mens-life-windows-x64/MSPA-Lib
+          Copy-Item vendor/MSPA-Lib/UPSTREAM.md, vendor/MSPA-Lib/README.md artifacts/mens-life-windows-x64/MSPA-Lib/
       - uses: actions/upload-artifact@v4
         with:
           name: mens-life-windows-x64

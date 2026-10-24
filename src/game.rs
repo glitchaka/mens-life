@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use crate::psychology::{ActivityEvent, Expression, Psychology, Reaction};
 use std::collections::VecDeque;
 use std::f64::consts::PI;
 
@@ -253,7 +254,7 @@ impl Default for Frame {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Game {
     pub navigation: Navigation,
     pub values: [f64; 5],
@@ -273,6 +274,13 @@ pub struct Game {
     pub displayed_clock: String,
     pub frame: Frame,
     pub drops_y: Vec<f64>,
+    pub psychology: Psychology,
+    pub reaction: Reaction,
+    manual_order: bool,
+    reconsider_in: f64,
+    activity_start: f64,
+    blocked_until: [f64; 5],
+    simulation_time: f64,
 }
 impl Game {
     pub fn new(navigation: Navigation, drops_y: Vec<f64>) -> Self {
@@ -295,6 +303,14 @@ impl Game {
             displayed_clock: "09:42".into(),
             frame: Frame::default(),
             drops_y,
+            psychology: Psychology::new(0x4d454e535f4c4946)
+                .expect("No se pudo iniciar MSPA-Lib para el personaje"),
+            reaction: Reaction::default(),
+            manual_order: false,
+            reconsider_in: 2.0,
+            activity_start: 0.0,
+            blocked_until: [0.0; 5],
+            simulation_time: 0.0,
         }
     }
     pub fn restore(&mut self) {
@@ -311,14 +327,28 @@ impl Game {
         self.frame.plumb = true;
     }
     pub fn command(&mut self, task: Task) {
+        self.begin_task(task, true);
+    }
+    fn interrupt(&mut self) {
+        if let Some(task) = self.task {
+            self.psychology.event(task, ActivityEvent::Interrupted);
+        }
+    }
+    fn begin_task(&mut self, task: Task, manual: bool) {
+        self.interrupt();
         self.restore();
         let Some(next) = self
             .navigation
             .route(self.frame.position, task.spec().approach)
         else {
+            self.path.clear();
             self.phase = Phase::Idle;
             self.task = None;
             self.action = "No hay un camino libre".into();
+            self.decision_in = 2.0;
+            self.blocked_until[task.spec().need] = self.simulation_time + 10.0;
+            self.psychology.event(task, ActivityEvent::Failed);
+            self.say("No puedo llegar hasta ahí. Buscaré otra cosa.");
             return;
         };
         self.task = Some(task);
@@ -326,39 +356,122 @@ impl Game {
         self.phase = Phase::Walking;
         self.elapsed = 0.0;
         self.action = task.spec().going.into();
+        self.manual_order = manual;
+        self.reconsider_in = 2.0;
+        self.activity_start = self.values[task.spec().need];
+        self.psychology.event(task, ActivityEvent::Started);
+        self.say(match task {
+            Task::Bed => "Voy a descansar un rato.",
+            Task::Eat => "¡Hora de comer algo!",
+            Task::Shower => "Me voy a dar una buena ducha.",
+            Task::Tv => "A ver qué ponen en la tele.",
+            Task::Toilet => "Voy al baño. Ahora vuelvo.",
+        });
     }
     pub fn walk_to(&mut self, point: Vec3) {
         if self.creator || self.paused || self.navigation.blocked(point.x, point.z) {
             return;
         }
-        self.restore();
-        if let Some(next) = self.navigation.route(self.frame.position, point) {
+        let from = if self.phase == Phase::Using {
+            self.task.map_or(self.frame.position, |task| task.spec().approach)
+        } else {
+            self.frame.position
+        };
+        if let Some(next) = self.navigation.route(from, point) {
+            self.interrupt();
+            self.restore();
             self.path = next;
             self.task = None;
             self.phase = Phase::Walking;
             self.action = "Caminando".into();
+            self.manual_order = true;
+            self.say("Voy para allá.");
+        } else {
+            self.say("No encuentro un camino hasta allí.");
         }
+    }
+    fn consider(&mut self) {
+        let from = if self.phase == Phase::Using {
+            self.task.map_or(self.frame.position, |task| task.spec().approach)
+        } else {
+            self.frame.position
+        };
+        let mut available = Vec::new();
+        for task in [Task::Bed, Task::Eat, Task::Shower, Task::Tv, Task::Toilet] {
+            let spec = task.spec();
+            if self.simulation_time < self.blocked_until[spec.need] {
+                continue;
+            }
+            if let Some(route) = self.navigation.route(from, spec.approach) {
+                let cost = route.len() as f32 * STEP as f32 * 0.003
+                    + spec.duration as f32 * 0.002;
+                let progress = if self.task == Some(task) && self.phase == Phase::Using {
+                    (self.elapsed / spec.duration).clamp(0.0, 1.0) as f32
+                } else { 0.0 };
+                available.push((task, cost, progress));
+            }
+        }
+        if let Some(task) = self.psychology.decide(&available, self.task) {
+            if self.task != Some(task) {
+                self.begin_task(task, false);
+            }
+        }
+        self.decision_in = 2.0;
+    }
+    pub fn expression(&self) -> Expression {
+        if self.psychology.error.is_some() { return Expression::Anxious; }
+        if self.phase == Phase::Using && self.task == Some(Task::Bed) {
+            return Expression::Sleeping;
+        }
+        let lowest = (0..5).min_by(|a, b| self.values[*a].total_cmp(&self.values[*b])).unwrap();
+        if self.values[lowest] <= 35.0 {
+            return [Expression::Tired, Expression::Hungry, Expression::Dirty,
+                Expression::Bored, Expression::Urgent][lowest];
+        }
+        self.psychology.emotion()
+    }
+    fn say(&mut self, words: &str) {
+        self.reaction = Reaction {
+            expression: self.expression(),
+            words: words.into(),
+            remaining: 7.0,
+        };
+    }
+    fn refresh_reaction(&mut self, dt: f64) {
+        self.reaction.remaining -= dt;
+        let next = self.expression();
+        if self.reaction.remaining <= 0.0
+            || (next != self.reaction.expression && self.reaction.remaining < 3.0)
+        {
+            self.reaction.words = if self.psychology.error.is_some() {
+                "No consigo decidir qué hacer ahora.".into()
+            } else { next.words().into() };
+            self.reaction.remaining = 10.0;
+        }
+        self.reaction.expression = next;
     }
     pub fn tick(&mut self, dt: f64, now: f64) {
         if self.paused || self.creator {
             return;
         }
-        let dt = dt.min(0.05);
+        let dt = if dt.is_finite() { dt.clamp(0.0, 0.05) } else { 0.0 };
+        self.simulation_time += dt;
         self.game_time += dt * 1.25;
         self.ui_time += dt;
         for (i, value) in self.values.iter_mut().enumerate() {
             *value = (*value - dt * DECAY[i]).max(0.0);
         }
+        self.psychology.advance(dt, self.values);
         if self.phase == Phase::Idle {
             self.decision_in -= dt;
             if self.decision_in <= 0.0 {
-                let mut lowest = 0;
-                for i in 1..5 {
-                    if self.values[i] < self.values[lowest] {
-                        lowest = i;
-                    }
-                }
-                self.command([Task::Bed, Task::Eat, Task::Shower, Task::Tv, Task::Toilet][lowest]);
+                self.consider();
+            }
+        } else if !self.manual_order && self.task.is_some() {
+            self.reconsider_in -= dt;
+            if self.reconsider_in <= 0.0 {
+                self.reconsider_in = 2.0;
+                self.consider();
             }
         }
         if self.phase == Phase::Walking {
@@ -377,10 +490,16 @@ impl Game {
                         self.frame.position.z = z;
                         self.frame.rotation[1] = dx.atan2(dz);
                     } else {
+                        if let Some(task) = self.task {
+                            self.psychology.event(task, ActivityEvent::Failed);
+                            self.blocked_until[task.spec().need] = self.simulation_time + 10.0;
+                        }
                         self.path.clear();
                         self.task = None;
                         self.phase = Phase::Idle;
                         self.decision_in = 2.0;
+                        self.action = "El camino está bloqueado".into();
+                        self.say("Vaya, no puedo pasar por aquí.");
                     }
                 }
                 self.walk_time += dt * 8.0;
@@ -393,10 +512,18 @@ impl Game {
                     self.phase = Phase::Using;
                     self.elapsed = 0.0;
                     self.action = task.spec().label.into();
+                    self.say(match task {
+                        Task::Bed => "Zzz... necesitaba este descanso.",
+                        Task::Eat => "Mmm... ¡qué rico!",
+                        Task::Shower => "¡Qué gusto el agua!",
+                        Task::Tv => "Este programa parece entretenido.",
+                        Task::Toilet => "Un momento de intimidad, por favor.",
+                    });
                 } else {
                     self.phase = Phase::Idle;
                     self.decision_in = 2.0;
                     self.action = "Descansando".into();
+                    self.manual_order = false;
                 }
             }
         }
@@ -431,11 +558,26 @@ impl Game {
                 self.values[spec.need] = (self.values[spec.need] + dt * 5.0).min(100.0);
             }
             if self.elapsed >= spec.duration {
+                let improved = self.values[spec.need] > self.activity_start + 0.5
+                    || self.values[spec.need] >= 95.0;
+                self.psychology.event(task, if improved {
+                    ActivityEvent::Completed
+                } else { ActivityEvent::Failed });
                 self.restore();
                 self.task = None;
                 self.phase = Phase::Idle;
                 self.decision_in = 2.0;
                 self.action = "Descansando".into();
+                self.manual_order = false;
+                self.say(if improved {
+                    match task {
+                        Task::Bed => "¡Mucho mejor! Ya tengo más energía.",
+                        Task::Eat => "¡Qué bien! Ya no tengo hambre.",
+                        Task::Shower => "Ahora sí, limpio y como nuevo.",
+                        Task::Tv => "Me hacía falta desconectar un poco.",
+                        Task::Toilet => "Uf... ¡qué alivio!",
+                    }
+                } else { "Eso no salió como esperaba." });
             }
         }
         self.frame.drops = self.phase == Phase::Using && self.task == Some(Task::Shower);
@@ -456,5 +598,6 @@ impl Game {
             let m = self.game_time.floor() as u64 % 1440;
             self.displayed_clock = format!("{:02}:{:02}", m / 60, m % 60);
         }
+        self.refresh_reaction(dt);
     }
 }

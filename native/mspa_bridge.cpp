@@ -1,0 +1,264 @@
+#include "mspa_bridge.h"
+#include <mspa/mspa.hpp>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstring>
+#include <exception>
+#include <memory>
+#include <stdexcept>
+#include <string>
+
+namespace {
+constexpr mspa::NamespaceId domain{1};
+constexpr mspa::AgentId character{mspa::WorldId{1}, 1};
+constexpr const char* names[] = {"energy", "food", "hygiene", "fun", "bladder"};
+
+template <typename T> void require(const mspa::Result<T>& result) {
+    if (!result) throw std::runtime_error(result.error_if()->details);
+}
+
+void copy_text(const char* text, char* output, size_t capacity) noexcept {
+    if (!output || capacity == 0) return;
+    const auto length = std::min(std::strlen(text), capacity - 1);
+    std::memcpy(output, text, length);
+    output[length] = '\0';
+}
+
+mspa::DomainPack house_pack() {
+    mspa::DomainPack pack;
+    pack.metadata.id = mspa::PackId{1};
+    pack.metadata.name_space = domain;
+    pack.metadata.name = "mens-life.house";
+    pack.context_tags = {"house", "care", "leisure", "interrupted"};
+    pack.outcome_tags = {"success", "blocked", "need_restored"};
+    for (uint64_t i = 0; i < 5; ++i) {
+        const auto concept = mspa::ConceptId{i + 1};
+        pack.concepts.push_back({concept, names[i]});
+        pack.initial_values.push_back({concept, 0.45f});
+        pack.action_types.push_back({mspa::ActionTypeId{i + 1}, names[i]});
+        for (uint64_t kind = 1; kind <= 6; ++kind) {
+            mspa::PredicateSchema schema;
+            schema.id = mspa::PredicateId{kind * 100 + i};
+            schema.name_space = domain;
+            schema.required_roles = {"subject"};
+            schema.related_concepts = {concept};
+            // Need discomfort, critical need, activity begun, success, failure, interruption.
+            const float consequences[] = {-0.35f, -0.85f, 0.06f, 0.65f, -0.65f, -0.08f};
+            schema.default_consequence = consequences[kind - 1];
+            schema.default_relevance = kind == 2 ? 0.95f : kind == 3 ? 0.2f : 0.65f;
+            pack.predicates.push_back(std::move(schema));
+        }
+    }
+    pack.action_types.push_back({mspa::ActionTypeId{6}, "rest"});
+    return pack;
+}
+}
+
+struct ml_brain {
+    std::unique_ptr<mspa::Runtime> runtime;
+    std::array<float, 5> values{74, 61, 82, 55, 70};
+    std::array<int, 5> bands{-1, -1, -1, -1, -1};
+    mspa::PsychTime now{};
+    uint64_t sequence{0};
+    float confidence{0};
+    // Error storage never allocates, including while handling std::bad_alloc.
+    std::array<char, 512> error{};
+
+    mspa::Proposition proposition(int task, int kind, bool positive = true) const {
+        mspa::Proposition p;
+        p.predicate = mspa::PredicateId{uint64_t(kind * 100 + task)};
+        p.name_space = domain;
+        p.positive = positive;
+        p.provenance = "mens-life:physical-simulation";
+        mspa::PropositionArg subject;
+        subject.role = "subject";
+        subject.has_agent = true;
+        subject.agent = character;
+        p.arguments.push_back(std::move(subject));
+        return p;
+    }
+
+    void observe(int task, int kind, bool positive = true) {
+        mspa::ObserveInput input;
+        input.agent = character;
+        input.proposition = proposition(task, kind, positive);
+        input.time.process_time = now;
+        input.perceived_certainty = 1;
+        input.source_trust = 1;
+        require(runtime->observe(input));
+    }
+
+    template <typename F> int32_t guarded(F operation) noexcept {
+        try {
+            operation();
+            error[0] = '\0';
+            return 1;
+        } catch (const std::exception& exception) {
+            copy_text(exception.what(), error.data(), error.size());
+        } catch (...) {
+            copy_text("Unknown MSPA bridge error", error.data(), error.size());
+        }
+        return 0;
+    }
+};
+
+extern "C" ml_brain* ml_brain_create(uint64_t seed, char* error, size_t capacity) noexcept {
+    try {
+        auto brain = std::make_unique<ml_brain>();
+        mspa::RegistryBuilder builder;
+        require(mspa::apply_domain_pack(builder, house_pack()));
+        mspa::RuntimeConfig config;
+        config.runtime_id = mspa::RuntimeId{1};
+        config.world_id = character.world;
+        // One logical tick per simulation millisecond. Pauses never advance it.
+        config.time_domain = {mspa::TimeDomainId{1}, {1000, 1}};
+        config.seed_root = seed;
+        config.limits.max_agents = 1;
+        config.limits.max_memories_per_agent = 256;
+        config.limits.max_beliefs_per_agent = 128;
+        config.limits.max_learning_patterns_per_agent = 64;
+        config.limits.max_diagnostics = 128;
+        auto created = mspa::Runtime::create(config, builder.publish());
+        require(created);
+        brain->runtime = std::move(*created.value_if());
+        mspa::AgentInit init;
+        init.personality = {0.5f, 0.65f, 0.6f, 0.65f, 0.55f, 0.5f};
+        init.use_registry_default_values = true;
+        for (uint64_t i = 0; i < 5; ++i) {
+            mspa::GoalState goal;
+            goal.id = mspa::GoalId{i + 1};
+            goal.concept_id = mspa::ConceptId{i + 1};
+            goal.priority = 0.25f;
+            goal.commitment = 0.6f;
+            init.goals.push_back(goal);
+        }
+        require(brain->runtime->create_agent(character, init, brain->now));
+        copy_text("", error, capacity);
+        return brain.release();
+    } catch (const std::exception& exception) {
+        copy_text(exception.what(), error, capacity);
+    } catch (...) {
+        copy_text("Cannot create MSPA runtime", error, capacity);
+    }
+    return nullptr;
+}
+
+extern "C" void ml_brain_destroy(ml_brain* brain) noexcept { delete brain; }
+
+extern "C" int32_t ml_brain_update(ml_brain* brain, uint64_t ticks, const float values[5]) noexcept {
+    if (!brain || !values) return 0;
+    return brain->guarded([&] {
+        const mspa::PsychTime next{ticks};
+        require(brain->runtime->advance_to(character, next));
+        brain->now = next;
+        for (int i = 0; i < 5; ++i) {
+            if (!std::isfinite(values[i])) throw std::runtime_error("Non-finite physical need");
+            brain->values[i] = std::clamp(values[i], 0.0f, 100.0f);
+            const int band = values[i] <= 15 ? 2 : values[i] <= 35 ? 1 : 0;
+            const int previous = brain->bands[i];
+            if (band == previous) continue;
+            if ((previous >= 1) != (band >= 1)) brain->observe(i, 1, band >= 1);
+            if ((previous == 2) != (band == 2)) brain->observe(i, 2, band == 2);
+            brain->bands[i] = band;
+        }
+    });
+}
+
+extern "C" int32_t ml_brain_decide(ml_brain* brain, const ml_option* offered, size_t count,
+                                    int32_t current, int32_t* selected) noexcept {
+    if (!brain || !selected || !offered || count == 0 || count > 6) return 0;
+    return brain->guarded([&] {
+        mspa::DecisionContext context;
+        float highest = 0;
+        for (uint64_t i = 0; i < 5; ++i) {
+            const float pressure = 1.0f - brain->values[i] / 100.0f;
+            context.needs.push_back({mspa::ConceptId{i + 1}, pressure * pressure});
+            highest = std::max(highest, pressure);
+        }
+        context.urgency = std::clamp((highest - 0.65f) / 0.35f, 0.0f, 1.0f);
+        std::vector<mspa::ActionOption> options;
+        const auto base = ++brain->sequence * 8;
+        for (size_t i = 0; i < count; ++i) {
+            if (offered[i].task < -1 || offered[i].task > 4)
+                throw std::runtime_error("Invalid offered activity");
+            const uint64_t key = offered[i].task < 0 ? 6 : uint64_t(offered[i].task + 1);
+            mspa::ActionOption option;
+            option.type = mspa::ActionTypeId{key};
+            option.instance = mspa::ActionInstanceId{base + i + 1};
+            option.continuity = mspa::ActionContinuityKey{key};
+            option.actor = character;
+            option.cost = offered[i].cost;
+            option.progress = offered[i].progress;
+            option.interruption_cost = offered[i].task == current ? 0.35f : 0;
+            option.context_tags = {"house", key == 4 || key == 6 ? "leisure" : "care"};
+            if (key != 6) {
+                const auto concept = mspa::ConceptId{key};
+                option.expected_effects.push_back({mspa::EffectChannel::Need, concept, {}, 1.4f, "need_restored"});
+                option.expected_effects.push_back({mspa::EffectChannel::Value, concept, {}, 0.08f, {}});
+                option.expected_effects.push_back({mspa::EffectChannel::Goal, concept, {}, 0.08f, {}});
+            } else {
+                option.expected_effects.push_back({mspa::EffectChannel::Generic, {}, {}, 0.22f, {}});
+            }
+            options.push_back(std::move(option));
+        }
+        const auto continuity = current >= 0 ? mspa::ActionContinuityKey{uint64_t(current + 1)}
+                                            : mspa::ActionContinuityKey{};
+        auto decision = brain->runtime->decide(character, options, context, brain->now, continuity);
+        require(decision);
+        *selected = -1;
+        if (decision.value_if()->has_selection) {
+            const auto index = decision.value_if()->selected_action.value() - base - 1;
+            if (index >= count) throw std::runtime_error("MSPA selected an unavailable activity");
+            *selected = offered[index].task;
+        }
+        brain->confidence = decision.value_if()->confidence;
+    });
+}
+
+extern "C" int32_t ml_brain_event(ml_brain* brain, int32_t task, int32_t kind) noexcept {
+    if (!brain || task < 0 || task >= 5 || kind < 0 || kind > 3) return 0;
+    return brain->guarded([&] {
+        if (kind == 0) {
+            brain->observe(task, 3);
+        } else if (kind == 3) {
+            // A player interruption is an observation, never fabricated failure evidence.
+            brain->observe(task, 6);
+        } else {
+            mspa::ReportInput report;
+            report.agent = character;
+            report.action_type = mspa::ActionTypeId{uint64_t(task + 1)};
+            report.process_time = brain->now;
+            report.success = kind == 1;
+            report.context_tags = {"house", task == 3 ? "leisure" : "care"};
+            report.outcome_tags = kind == 1 ? std::vector<std::string>{"success", "need_restored"}
+                                          : std::vector<std::string>{"blocked"};
+            report.resulting_propositions.push_back(brain->proposition(task, kind == 1 ? 4 : 5));
+            require(brain->runtime->report(report));
+        }
+        if (kind != 0) {
+            // End continuity after a real completion/cancellation, so it cannot bias the next task.
+            require(brain->runtime->decide(character, {}, brain->now));
+        }
+    });
+}
+
+extern "C" int32_t ml_brain_state(const ml_brain* brain, ml_psych_state* output) noexcept {
+    if (!brain || !output) return 0;
+    const auto* state = brain->runtime->agents().find(character);
+    if (!state) return 0;
+    *output = {};
+    for (const auto& emotion : state->emotions)
+        output->emotions[static_cast<size_t>(emotion.kind)] = emotion.intensity;
+    output->valence = state->mood.valence;
+    output->activation = state->mood.activation;
+    output->confidence = brain->confidence;
+    output->memories = static_cast<uint32_t>(state->memories.size());
+    output->beliefs = static_cast<uint32_t>(state->beliefs.size());
+    output->learned_patterns = static_cast<uint32_t>(state->learned_expectations.size());
+    return 1;
+}
+
+extern "C" void ml_brain_error(const ml_brain* brain, char* output, size_t capacity) noexcept {
+    copy_text(brain ? brain->error.data() : "Missing MSPA runtime", output, capacity);
+}

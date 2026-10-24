@@ -1,6 +1,7 @@
 //! Native controls painted directly into the GPU frame.
 use crate::{
     game::{Game, Task},
+    psychology::Expression,
     scene::Avatar,
 };
 use bevy_egui::egui::{
@@ -100,6 +101,71 @@ fn button(ui: &mut egui::Ui, r: Rect, id: &str, label: &str, size: f32, fill: u3
 pub struct UiOutcome {
     pub avatar_changed: bool,
 }
+
+// Emoticons are painted as native vectors, so every face works without a
+// system emoji font, a texture download or missing-glyph rectangles.
+fn emoticon(p: &egui::Painter, center: Pos2, radius: f32, expression: Expression) {
+    let ink = color(0x514535);
+    p.circle_filled(center, radius, color(0xffda7b));
+    p.circle_stroke(center, radius, Stroke::new(1.0, color(0xe7bb60)));
+    let eye_y = center.y - radius * 0.17;
+    for side in [-1.0, 1.0] {
+        let eye = pos2(center.x + side * radius * 0.34, eye_y);
+        if matches!(expression, Expression::Sleeping | Expression::Tired) {
+            p.line_segment([eye - vec2(radius * 0.12, 0.0), eye + vec2(radius * 0.12, 0.0)], Stroke::new(1.8, ink));
+        } else {
+            p.circle_filled(eye, radius * if expression == Expression::Urgent { 0.13 } else { 0.09 }, ink);
+        }
+        if matches!(expression, Expression::Angry | Expression::Anxious | Expression::Afraid) {
+            let tilt = if expression == Expression::Angry { side * 0.12 } else { -side * 0.1 };
+            let brow = eye - vec2(0.0, radius * 0.24);
+            p.line_segment([
+                brow + vec2(-radius * 0.15, -radius * tilt),
+                brow + vec2(radius * 0.15, radius * tilt),
+            ], Stroke::new(1.8, ink));
+        }
+    }
+    let mouth = center + vec2(0.0, radius * 0.35);
+    if matches!(expression, Expression::Afraid | Expression::Urgent | Expression::Sleeping) {
+        p.circle_stroke(mouth, radius * 0.16, Stroke::new(1.7, ink));
+    } else if expression == Expression::Bored {
+        p.line_segment([mouth - vec2(radius * 0.27, 0.0), mouth + vec2(radius * 0.27, 0.0)], Stroke::new(1.8, ink));
+    } else {
+        let happy = matches!(expression, Expression::Calm | Expression::Happy | Expression::Hungry);
+        let points: Vec<_> = (0..=12).map(|i| {
+            let x = i as f32 / 6.0 - 1.0;
+            mouth + vec2(x * radius * 0.35, (1.0 - x * x) * radius * if happy { 0.17 } else { -0.17 })
+        }).collect();
+        p.add(egui::Shape::line(points, Stroke::new(1.8, ink)));
+        if expression == Expression::Hungry {
+            p.circle_filled(mouth + vec2(radius * 0.15, radius * 0.18), radius * 0.1, color(0xdf8f8a));
+        }
+    }
+}
+
+pub fn draw_reaction(ctx: &egui::Context, game: &Game, anchor: [f32; 2]) {
+    if game.creator { return; }
+    let screen = ctx.content_rect();
+    let width = 300.0_f32.min((screen.width() - 20.0).max(1.0));
+    let min_left = screen.left() + 10.0;
+    let left = (anchor[0] - width * 0.5).clamp(min_left, (screen.right() - width - 10.0).max(min_left));
+    let top = (anchor[1] - 102.0).clamp(screen.top() + 96.0, (screen.bottom() - 175.0).max(96.0));
+    let rect = Rect::from_min_size(pos2(left, top), vec2(width, 82.0));
+    let p = ctx.layer_painter(egui::LayerId::new(Order::Middle, Id::new("character-reaction")));
+    panel(&p, rect, 17, 0xfffdf5, 248);
+    let tail_x = anchor[0].clamp(rect.left() + 24.0, rect.right() - 24.0);
+    p.add(egui::Shape::convex_polygon(vec![
+        pos2(tail_x - 8.0, rect.bottom() - 1.0),
+        pos2(tail_x + 8.0, rect.bottom() - 1.0),
+        pos2(tail_x, rect.bottom() + 12.0),
+    ], color(0xfffdf5), Stroke::NONE));
+    let expression = game.reaction.expression;
+    emoticon(&p, rect.min + vec2(29.0, 37.0), 18.0, expression);
+    text(&p, rect.min + vec2(58.0, 11.0), Align2::LEFT_TOP, expression.label(), 12.0, expression.color());
+    let words = p.layout(game.reaction.words.clone(), FontId::proportional(13.0), color(INK), width - 71.0);
+    p.galley(rect.min + vec2(58.0, 31.0), words, color(INK));
+}
+
 pub fn draw(ctx: &egui::Context, game: &mut Game, avatar: &mut Avatar) -> UiOutcome {
     let screen = ctx.content_rect();
     let w = screen.width();
@@ -191,6 +257,33 @@ pub fn draw(ctx: &egui::Context, game: &mut Game, avatar: &mut Avatar) -> UiOutc
         if mobile { 10.0 } else { 22.0 },
         h - (if mobile { 10.0 } else { 24.0 }) - nh,
     );
+    if !game.creator {
+        let position = np - vec2(0.0, 69.0);
+        egui::Area::new(Id::new("psychological-state"))
+            .fixed_pos(position)
+            .order(Order::Middle)
+            .movable(false)
+            .show(ctx, |ui| {
+                let rect = Rect::from_min_size(position, vec2(nw, 59.0));
+                let response = ui.allocate_rect(rect, Sense::hover());
+                panel(ui.painter(), rect, 17, 0xf8f6ed, 238);
+                let expression = game.reaction.expression;
+                emoticon(ui.painter(), position + vec2(29.0, 29.0), 17.0, expression);
+                text(ui.painter(), position + vec2(56.0, 12.0), Align2::LEFT_TOP,
+                    &format!("{} {}", expression.emoticon(), expression.label()),
+                    if mobile { 10.0 } else { 12.0 }, expression.color());
+                text(ui.painter(), position + vec2(56.0, 33.0), Align2::LEFT_TOP,
+                    "Estado de ánimo", 11.0, 0x718083);
+                let state = game.psychology.state;
+                let detail = if let Some(error) = &game.psychology.error {
+                    format!("MSPA: {error}")
+                } else {
+                    format!("Recuerdos: {} · Creencias: {}\nExperiencias aprendidas: {}\nÁnimo: {:+.2}",
+                        state.memories, state.beliefs, state.learned_patterns, state.valence)
+                };
+                response.on_hover_text(detail);
+            });
+    }
     egui::Area::new(Id::new("needs"))
         .fixed_pos(np)
         .order(Order::Middle)
@@ -352,7 +445,7 @@ pub fn draw(ctx: &egui::Context, game: &mut Game, avatar: &mut Avatar) -> UiOutc
         &p,
         hp,
         Align2::CENTER_CENTER,
-        "Autonomía activa · Pulsa un mueble para darle una indicación",
+        "Pulsa un mueble para darle una indicación",
         12.0,
         0xffffff,
     );

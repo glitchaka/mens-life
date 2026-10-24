@@ -283,7 +283,11 @@ fn setup(
         life.game.tick(0.05, i as f64 * 50.0);
     }
 }
-fn interface(mut contexts: EguiContexts, mut life: ResMut<Life>) -> Result {
+fn interface(
+    mut contexts: EguiContexts,
+    mut life: ResMut<Life>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+) -> Result {
     let ctx = contexts.ctx_mut()?;
     let Life {
         game,
@@ -292,6 +296,20 @@ fn interface(mut contexts: EguiContexts, mut life: ResMut<Life>) -> Result {
         ..
     } = &mut *life;
     *changed |= ui::draw(ctx, game, avatar).avatar_changed;
+    let frame = &game.frame;
+    let rotation = Quat::from_euler(EulerRot::XYZ,
+        frame.rotation[0] as f32, frame.rotation[1] as f32, frame.rotation[2] as f32);
+    let head = Vec3::new(frame.position.x as f32, frame.position.y as f32, frame.position.z as f32)
+        + rotation * Vec3::new(0.0, 2.35, 0.0) + Vec3::Y * 0.5;
+    let (camera, transform) = *camera;
+    if let Ok(position) = camera.world_to_viewport(transform, head) {
+        let size = camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);
+        let screen = ctx.content_rect();
+        ui::draw_reaction(ctx, game, [
+            screen.left() + position.x * screen.width() / size.x,
+            screen.top() + position.y * screen.height() / size.y,
+        ]);
+    }
     Ok(())
 }
 fn configure_interface(mut contexts: EguiContexts, mut configured: Local<bool>) {
@@ -324,14 +342,9 @@ fn avatar_changed(
             transform.scale = geometry::vector(&node["scale"], [1.0; 3]).as_vec3();
         }
     }
-    let creator = life.game.creator;
-    let paused = life.game.paused;
-    life.game = Game::new(
-        Navigation::new(geometry::navigation_bounds(&spec)),
-        spec.drops_y,
-    );
-    life.game.creator = creator;
-    life.game.paused = paused;
+    // Appearance edits keep the same person: never erase MSPA's memories,
+    // learned expectations, mood or current activity when changing a color/name.
+    life.game.navigation = Navigation::new(geometry::navigation_bounds(&spec));
 }
 fn advance(
     time: Res<Time>,

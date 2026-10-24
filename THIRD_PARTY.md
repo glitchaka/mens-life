@@ -1,5 +1,12 @@
 # Dependencias
 
+MSPA-Lib 1.0.0, de `glitchaka/MSPA-Lib`, revisión
+`4532daf43a4ffa0a2b7abb8cace29ba53a9b8d89`, se incluye sin modificaciones
+en `vendor/MSPA-Lib` y se enlaza estáticamente. Su origen y revisión están
+en `vendor/MSPA-Lib/UPSTREAM.md`. Esa revisión del repositorio original no
+incluye un archivo de licencia; se conserva su atribución y documentación.
+El adaptador del juego queda fuera de la biblioteca original, en `native/`.
+
 El juego usa Bevy 0.17.3 (MIT / Apache-2.0), wgpu (MIT / Apache-2.0),
 winit (Apache-2.0), egui y bevy_egui (MIT / Apache-2.0 / MIT).
 La interfaz incorpora subconjuntos de Inter (SIL Open Font License 1.1) y
