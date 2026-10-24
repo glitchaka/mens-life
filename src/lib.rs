@@ -1,6 +1,8 @@
 pub mod game;
 pub mod geometry;
+pub mod house;
 pub mod human;
+pub mod mspa_ui;
 pub mod psychology;
 pub mod scene;
 pub mod society;
