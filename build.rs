@@ -11,33 +11,7 @@ fn sources(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
     }
 }
 
-fn materialize_house_asset() {
-    const PARTS: [&str; 5] = [
-        "assets/house/autumn_house.gltf.part00",
-        "assets/house/autumn_house.gltf.part01",
-        "assets/house/autumn_house.gltf.part02",
-        "assets/house/autumn_house.gltf.part03",
-        "assets/house/autumn_house.gltf.part04",
-    ];
-    const EXPECTED_BYTES: usize = 60_241;
-    for part in PARTS {
-        println!("cargo:rerun-if-changed={part}");
-    }
-    let target = Path::new("assets/house/autumn_house.gltf");
-    let valid = fs::metadata(target).is_ok_and(|meta| meta.len() == EXPECTED_BYTES as u64);
-    if valid {
-        return;
-    }
-    let mut source = String::with_capacity(EXPECTED_BYTES);
-    for part in PARTS {
-        source.push_str(&fs::read_to_string(part).expect("Autumn House asset chunk missing"));
-    }
-    assert_eq!(source.len(), EXPECTED_BYTES, "Autumn House asset chunks are incomplete");
-    fs::write(target, source).expect("Cannot materialize Autumn House glTF");
-}
-
 fn main() {
-    materialize_house_asset();
     println!("cargo:rerun-if-changed=vendor/MSPA-Lib/include");
     println!("cargo:rerun-if-changed=vendor/MSPA-Lib/src");
     println!("cargo:rerun-if-changed=native/mspa_bridge.h");
