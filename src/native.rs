@@ -18,19 +18,19 @@ use mens_life::{
     haunting::Haunting,
     haunting_ui,
     mspa_ui, perception,
+    poltergeist::Poltergeist,
     scene::{self, Avatar}, society::Society, ui,
 };
 use serde_json::Value;
 use std::collections::HashMap;
 
 #[derive(Resource)]
-struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, changed: bool, random: Vec<f64> }
+struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, poltergeist: Poltergeist, changed: bool, random: Vec<f64> }
 #[derive(Component)] struct NodeId(String);
 #[derive(Component)] struct Furniture(Task);
 #[derive(Component)] struct Person(u64);
 #[derive(Component)] struct CharacterRoot { profile_index: usize }
 #[derive(Component)] struct CameraRig;
-#[derive(Component)] struct HauntLight;
 #[derive(Clone, Copy, Component, PartialEq, Eq)] enum CutawaySide { Roof, East, West, North, South }
 #[derive(Component)] struct CutawayPart(CutawaySide);
 #[derive(Component)] struct CharacterAnimation { profile_index: usize, idle: Option<AnimationNodeIndex>, walk: Option<AnimationNodeIndex>, walking: bool }
@@ -50,7 +50,7 @@ pub fn run(){
     let random=(0..90).map(|_|{seed=seed.wrapping_mul(6364136223846793005).wrapping_add(1);(seed>>11)as f64/(1u64<<53)as f64}).collect::<Vec<_>>();
     let avatar=Avatar::default();let spec=scene::build(&avatar,&random);let mut game=Game::new(Navigation::new(geometry::navigation_bounds(&spec)),spec.drops_y);game.creator=!capture.skip_creator;let society=Society::new(&game.navigation,avatar.character);
     App::new()
-        .insert_resource(Life{game,avatar,society,haunting:Haunting::default(),changed:false,random})
+        .insert_resource(Life{game,avatar,society,haunting:Haunting::default(),poltergeist:Poltergeist::default(),changed:false,random})
         .insert_resource(capture).insert_resource(CameraOrbit::default())
         .insert_resource(ClearColor(rgb(0x9ec7d0))).insert_resource(AmbientLight{color:rgb(0xfff6df),brightness:1.6,..default()}).insert_resource(DirectionalLightShadowMap{size:2048}).init_resource::<Materials>()
         .add_plugins(DefaultPlugins.set(WindowPlugin{primary_window:Some(Window{title:"Vida Isométrica 3D".into(),resolution:WindowResolution::new(1280,800),..default()}),..default()}))
