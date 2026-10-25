@@ -30,32 +30,18 @@ fn setup(
     mut life:ResMut<Life>,
     capture:Res<Capture>,
 ){
-    // The supplied Autumn House source is authored in feet. Keep the imported GLB
-    // geometry untouched and convert its root to metres so it lines up with the
-    // navigation volumes, furniture and character heights used by the simulation.
+    // Replacement house. The Sketchfab GLB is already converted to glTF units,
+    // so do not apply the old Autumn House feet-to-metres scale.
+    // Offset it over the simulation's existing activity coordinates while its
+    // exact room bounds are being calibrated from the imported model.
     commands.spawn((
-        gltf_asset(&asset_server,"house/house.glb"),
-        Name::new("AutumnHouse"),
-        Transform::from_scale(Vec3::splat(0.3048)),
+        gltf_asset(&asset_server,"two_stories_with_interiors.glb"),
+        Name::new("TwoStoriesHouse"),
+        Transform::from_translation(Vec3::new(-3.0,0.0,0.0)),
     ));
 
-    for(path,position,scale,yaw,name)in[
-        ("furniture/bed.glb",[-4.03,0.0,2.08],0.80,0.0,"BedAsset"),
-        ("furniture/sofa.glb",[-3.67,0.0,0.35],0.72,0.0,"SofaAsset"),
-        ("furniture/small_table.glb",[-2.55,0.0,0.38],0.72,0.0,"SmallTableAsset"),
-        ("furniture/classic_table.glb",[-2.20,0.654,-1.12],0.75,0.0,"DiningTableAsset"),
-        ("furniture/bathroom.glb",[-4.02,0.0,-2.27],0.72,0.0,"BathroomAsset"),
-    ]{
-        commands.spawn((gltf_asset(&asset_server,path),Name::new(name),Transform{translation:Vec3::new(position[0],position[1],position[2]),rotation:Quat::from_rotation_y(yaw),scale:Vec3::splat(scale)}));
-    }
-    for(position,yaw)in[
-        ([-2.90,0.0,-1.12],std::f32::consts::FRAC_PI_2),
-        ([-1.50,0.0,-1.12],-std::f32::consts::FRAC_PI_2),
-        ([-2.20,0.0,-1.88],0.0),
-        ([-2.20,0.0,-0.38],std::f32::consts::PI),
-    ]{
-        commands.spawn((gltf_asset(&asset_server,"furniture/chair.glb"),Name::new("DiningChairAsset"),Transform{translation:Vec3::from_array(position),rotation:Quat::from_rotation_y(yaw),scale:Vec3::ONE}));
-    }
+    // The replacement house is already furnished. Do not duplicate the old standalone
+    // furniture GLBs on top of its interior; interaction proxies remain lightweight/invisible.
 
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
         if !spec.available{continue;}
