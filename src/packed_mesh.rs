@@ -1,20 +1,12 @@
-//! Compact runtime meshes baked directly from the user-supplied FBX/OBJ assets.
-//! No procedural replacement geometry is generated here.
+//! Compact runtime mesh baked directly from the user-supplied girl OBJ asset.
+//! No procedural replacement character geometry is generated here.
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
 };
 
-const HOUSE: &[&str] = &[
-    include_str!("model_data/house_00.txt"), include_str!("model_data/house_01.txt"),
-    include_str!("model_data/house_02.txt"), include_str!("model_data/house_03.txt"),
-    include_str!("model_data/house_04.txt"),
-];
-const GIRL: &[&str] = &[
-    include_str!("model_data/girl_00.txt"), include_str!("model_data/girl_01.txt"),
-    include_str!("model_data/girl_02.txt"),
-];
+const GIRL: &[&str] = &[include_str!("model_data/girl_small.txt")];
 
 fn sextet(byte: u8) -> Option<u8> {
     match byte {
@@ -105,5 +97,4 @@ fn unpack(chunks: &[&str]) -> Mesh {
         .with_inserted_indices(Indices::U32(indices))
 }
 
-pub fn house() -> Mesh { unpack(HOUSE) }
 pub fn girl() -> Mesh { unpack(GIRL) }
