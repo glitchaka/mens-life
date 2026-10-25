@@ -19,6 +19,7 @@ use mens_life::{
     haunting_ui,
     mspa_ui, perception,
     poltergeist::Poltergeist,
+    poltergeist_ui,
     scene::{self, Avatar}, society::Society, ui,
 };
 use serde_json::Value;
