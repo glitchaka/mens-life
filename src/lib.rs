@@ -5,6 +5,7 @@ pub mod house;
 pub mod house_asset;
 pub mod human;
 pub mod mspa_ui;
+pub mod packed_mesh;
 pub mod perception;
 pub mod psychology;
 pub mod scene;
