@@ -30,7 +30,14 @@ fn setup(
     mut life:ResMut<Life>,
     capture:Res<Capture>,
 ){
-    commands.spawn((gltf_asset(&asset_server,"house/house.glb"),Name::new("AutumnHouse"),Transform::IDENTITY));
+    // The supplied Autumn House source is authored in feet. Keep the imported GLB
+    // geometry untouched and convert its root to metres so it lines up with the
+    // navigation volumes, furniture and character heights used by the simulation.
+    commands.spawn((
+        gltf_asset(&asset_server,"house/house.glb"),
+        Name::new("AutumnHouse"),
+        Transform::from_scale(Vec3::splat(0.3048)),
+    ));
 
     for(path,position,scale,yaw,name)in[
         ("furniture/bed.glb",[-4.03,0.0,2.08],0.80,0.0,"BedAsset"),
