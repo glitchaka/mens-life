@@ -1,5 +1,5 @@
 use bevy::{
-    animation::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex, AnimationPlayer},
+    animation::{AnimationPlayer, graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex}},
     camera::{Exposure, ScalingMode},
     core_pipeline::tonemapping::Tonemapping,
     gltf::GltfAssetLabel,
