@@ -1,3 +1,5 @@
+pub mod character_catalog;
+pub mod character_ui;
 pub mod furnishings;
 pub mod game;
 pub mod geometry;
