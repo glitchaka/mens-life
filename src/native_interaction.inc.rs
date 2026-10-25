@@ -28,7 +28,10 @@ fn pick(
     let mut hit=None;let mut closest=f32::INFINITY;
     for(f,handle,transform)in &furniture{let Some(mesh)=meshes.get(&handle.0)else{continue;};let inverse=transform.affine().inverse();if let Some(t)=intersection(mesh,inverse.transform_point3(ray.origin),inverse.transform_vector3(*ray.direction))&&t<closest{closest=t;hit=Some(f.0);}}
     if let Some(profile)=character_hit&&character_t<closest{
-        if let Some(resident)=life.society.residents.iter().find(|r|r.profile_index==profile){life.society.selected=Some(resident.id);life.society.status=format!("{} está afuera",resident.avatar.name);}
+        if let Some((id,name))=life.society.residents.iter().find(|r|r.profile_index==profile).map(|resident|(resident.id,resident.avatar.name.clone())){
+            life.society.selected=Some(id);
+            life.society.status=format!("{} está afuera",name);
+        }
         return;
     }
     if let Some(task)=hit{
