@@ -50,6 +50,8 @@ La chica elegida vive dentro de la casa. Las demás existen simultáneamente com
 
 Cada chica posee su propio perfil MSPA. El perfil visual y la identidad psicológica están separados para evitar mezclar estados o rasgos al cambiar de personaje.
 
+El núcleo vendorizado corresponde a **MSPA-Lib 1.1.1**, revisión `9b217dc387a3b0e0152cac161da2ef44ff3677cb`. La rama 1.1 añade perfiles psicológicos definidos por el host (`PsychologicalProfile`, `ProfileRegistry` y `ProfileRecipe`) y la revisión 1.1.1 garantiza un baseline emocional tónico para las seis emociones base de todo agente activo. La copia anterior 1.0.0 con backport local fue retirada.
+
 El panel `MSPA · rasgos por personaje` permite inspeccionar cualquier residente y muestra directamente desde MSPA:
 
 - sociabilidad, estabilidad, empatía, persistencia, curiosidad y audacia;
@@ -131,7 +133,7 @@ El set adicional `furniture_set.glb` permanece disponible en `assets/furniture/`
 - `src/haunting_ui.rs`: progreso y selector de poderes.
 - `src/game.rs`: necesidades, decisiones autónomas y navegación.
 - `native/mspa_bridge.cpp`: puente C++ y perfiles MSPA.
-- `vendor/MSPA-Lib`: núcleo MSPA-Lib.
+- `vendor/MSPA-Lib`: núcleo MSPA-Lib 1.1.1 vendorizado.
 
 ## Estado de sesión
 
