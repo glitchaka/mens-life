@@ -11,10 +11,8 @@ fn setup(
     mut life:ResMut<Life>,
     capture:Res<Capture>,
 ){
-    // Original house asset. No procedural replacement and no packed/rebuilt mesh.
     commands.spawn((gltf_scene(&asset_server,"house/house.glb"),Name::new("AutumnHouse"),Transform::IDENTITY));
 
-    // User-provided furniture. Geometry stays untouched; only scene transforms normalize scale/origin.
     for(path,position,scale,yaw,name)in[
         ("furniture/bed.glb",[-4.03,0.0,2.08],0.80,0.0,"BedAsset"),
         ("furniture/sofa.glb",[-3.67,0.0,0.35],0.72,0.0,"SofaAsset"),
@@ -30,11 +28,9 @@ fn setup(
         ([-2.20,0.0,-1.88],0.0),
         ([-2.20,0.0,-0.38],std::f32::consts::PI),
     ]{
-        commands.spawn((gltf_scene(&asset_server,"furniture/chair.glb"),Name::new("DiningChairAsset"),Transform{translation:Vec3::from_array(position),rotation:Quat::from_rotation_y(yaw),scale:Vec3::splat(0.75)}));
+        commands.spawn((gltf_scene(&asset_server,"furniture/chair.glb"),Name::new("DiningChairAsset"),Transform{translation:Vec3::from_array(position),rotation:Quat::from_rotation_y(yaw),scale:Vec3::ONE}));
     }
 
-    // Real uploaded character assets only. Selected resident stays in the house;
-    // the other available characters are moved by Society through the outdoor area.
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
         if !spec.available{continue;}
         let p=if profile_index==life.avatar.character{life.game.frame.position}else{life.society.residents.iter().find(|r|r.profile_index==profile_index).map(|r|r.frame.position).unwrap_or(Point::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]))};
@@ -44,7 +40,6 @@ fn setup(
         ));
     }
 
-    // SceneSpec contributes only invisible interaction/collision proxies and lightweight effects.
     let spec=scene::build(&life.avatar,&life.random);
     for(id,value)in spec.materials.as_object().unwrap(){shared.0.insert(id.clone(),materials.add(material(value)));}
     let mut entities=HashMap::<String,Entity>::new();
