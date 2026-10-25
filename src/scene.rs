@@ -16,7 +16,7 @@ pub struct Avatar {
 impl Default for Avatar {
     fn default() -> Self {
         Self {
-            name: "Aiko".into(), character: 0, body: "asset".into(), skin: "#ffffff".into(),
+            name: "Mia".into(), character: 1, body: "asset".into(), skin: "#ffffff".into(),
             hair: "#ffffff".into(), shirt: "#ffffff".into(), pants: "#ffffff".into(),
         }
     }
