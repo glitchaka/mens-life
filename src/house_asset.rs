@@ -51,5 +51,7 @@ fn unpack(encoded: &[&str]) -> Geometry {
     Geometry::from_raw(positions,normals,Vec::new(),colors,indices)
 }
 
-pub(crate) fn lower() -> Geometry { unpack(LOWER) }
-pub(crate) fn upper() -> Geometry { unpack(UPPER) }
+/// Playable cutaway/lower shell, including the exterior ground/patio baked from the supplied FBX.
+pub fn lower() -> Geometry { unpack(LOWER) }
+/// Upper/roof section kept available for future camera/roof toggling.
+pub fn upper() -> Geometry { unpack(UPPER) }
