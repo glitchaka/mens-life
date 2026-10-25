@@ -63,11 +63,7 @@ fn setup(
     let orbit=CameraOrbit::default();let focus=Vec3::new(-2.5,0.7,0.0);let camera_pos=focus+Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
     commands.spawn((CameraRig,Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:15.5,min_height:10.5},..OrthographicProjection::default_3d()}),Transform::from_translation(camera_pos).looking_at(focus,Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:28.0,end:52.0},..default()}));
 
-    if let Some(task)=capture.task{
-        let profile=life.avatar.character;
-        let Life{game,society,haunting,poltergeist,..}=&mut *life;
-        poltergeist.disturb(task,haunting,game,society,profile);
-    }
+    if let Some(task)=capture.task{life.game.command(task);}
     for i in 0..capture.simulate{
         life.game.tick(0.05,i as f64*50.0);
         let profile=life.avatar.character;
@@ -87,27 +83,10 @@ fn interface(mut contexts:EguiContexts,mut life:ResMut<Life>,camera:Single<(&Cam
         return Ok(());
     }
 
-    let Life{game,avatar,society,haunting,poltergeist,..}=&mut *life;
-    let before_order=game.order_serial;
-    let before_position=game.ground_position;
+    let Life{game,avatar,society,haunting,..}=&mut *life;
     let _=ui::draw(ctx,game,avatar);
-
-    // Defensive conversion of the old action strip: even if an underlying legacy
-    // button receives a click, it becomes an anonymous house disturbance in the
-    // same frame instead of remaining a command to the resident.
-    let legacy_disturbance=if game.order_serial!=before_order{game.task}else{None};
-    if legacy_disturbance.is_some(){
-        game.path.clear();game.task=None;game.phase=game::Phase::Idle;game.ground_position=before_position;game.restore();
-        game.action="Observando la casa".into();game.talking=false;game.decision_in=1.0;
-    }
-
     if !society.residents.is_empty(){ui::draw_social(ctx,game,society);}
     mspa_ui::draw(ctx,game,society,&avatar.name);
-
-    let explicit_disturbance=poltergeist_ui::draw(ctx);
-    if let Some(task)=explicit_disturbance.or(legacy_disturbance){
-        poltergeist.disturb(task,haunting,game,society,avatar.character);
-    }
     if let Some(power)=haunting_ui::draw(ctx,haunting){
         haunting.invoke(power,game,society,avatar.character);
     }
