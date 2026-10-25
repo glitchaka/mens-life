@@ -8,6 +8,7 @@ pub mod haunting_ui;
 pub mod house;
 pub mod mspa_ui;
 pub mod perception;
+pub mod poltergeist;
 pub mod psychology;
 pub mod scene;
 pub mod society;
