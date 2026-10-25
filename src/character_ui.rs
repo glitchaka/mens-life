@@ -1,4 +1,4 @@
-use crate::{character_catalog::CHARACTERS, scene::Avatar};
+use crate::{character_catalog::{self, CHARACTERS}, scene::Avatar};
 use bevy_egui::egui::{self, Align2, Color32, FontId, Id, Order, Rect, Sense, Stroke, StrokeKind, vec2};
 
 #[derive(Default)]
@@ -29,8 +29,8 @@ pub fn draw(ctx: &egui::Context, avatar: &mut Avatar) -> CharacterUiOutcome {
         let gap = 12.0;
         let card_w = (panel_w - 60.0 - gap * 2.0) / 3.0;
         let card_h = 112.0;
-        for (i, spec) in CHARACTERS.iter().enumerate() {
-            let row = i / 3; let col = i % 3;
+        for (display_index, (i, spec)) in character_catalog::available_characters().enumerate() {
+            let row = display_index / 3; let col = display_index % 3;
             let min = origin + vec2(30.0 + col as f32 * (card_w + gap), 145.0 + row as f32 * (card_h + gap));
             let r = Rect::from_min_size(min, vec2(card_w, card_h));
             let response = ui.interact(r, Id::new(("character-card", i)), Sense::click());
@@ -52,6 +52,8 @@ pub fn draw(ctx: &egui::Context, avatar: &mut Avatar) -> CharacterUiOutcome {
                 out.changed = true;
             }
         }
+        ui.painter().text(origin + vec2(30.0, panel_h - 104.0), Align2::LEFT_BOTTOM,
+            "Cada modelo conserva su personalidad MSPA; las demás pasean por el exterior.", FontId::proportional(10.5), Color32::from_rgb(102,116,117));
         let start = Rect::from_min_size(origin + vec2(30.0, panel_h - 76.0), vec2(panel_w - 60.0, 48.0));
         let response = ui.interact(start, Id::new("start-life"), Sense::click());
         ui.painter().rect_filled(start, 14.0, if response.hovered() { Color32::from_rgb(55, 105, 101) } else { Color32::from_rgb(71, 121, 118) });
