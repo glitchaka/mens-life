@@ -1,5 +1,24 @@
-fn gltf_scene(asset_server:&AssetServer,path:&'static str)->SceneRoot {
-    SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(path)))
+fn gltf_asset(asset_server:&AssetServer,path:&'static str)->PendingGltf {
+    PendingGltf(asset_server.load(path))
+}
+
+fn resolve_gltf(
+    mut commands:Commands,
+    gltfs:Res<Assets<Gltf>>,
+    pending:Query<(Entity,&PendingGltf)>,
+){
+    for(entity,pending)in &pending{
+        let Some(gltf)=gltfs.get(&pending.0)else{continue;};
+        if let Some(scene)=gltf.default_scene.clone(){
+            commands.entity(entity).insert(SceneRoot(scene)).remove::<PendingGltf>();
+        }else if gltf.scenes.len()==1{
+            commands.entity(entity).insert(SceneRoot(gltf.scenes[0].clone())).remove::<PendingGltf>();
+        }else if !gltf.scenes.is_empty(){
+            commands.entity(entity).with_children(|parent|{
+                for scene in &gltf.scenes{parent.spawn(SceneRoot(scene.clone()));}
+            }).remove::<PendingGltf>();
+        }
+    }
 }
 
 fn setup(
@@ -11,7 +30,7 @@ fn setup(
     mut life:ResMut<Life>,
     capture:Res<Capture>,
 ){
-    commands.spawn((gltf_scene(&asset_server,"house/house.glb"),Name::new("AutumnHouse"),Transform::IDENTITY));
+    commands.spawn((gltf_asset(&asset_server,"house/house.glb"),Name::new("AutumnHouse"),Transform::IDENTITY));
 
     for(path,position,scale,yaw,name)in[
         ("furniture/bed.glb",[-4.03,0.0,2.08],0.80,0.0,"BedAsset"),
@@ -20,7 +39,7 @@ fn setup(
         ("furniture/classic_table.glb",[-2.20,0.654,-1.12],0.75,0.0,"DiningTableAsset"),
         ("furniture/bathroom.glb",[-4.02,0.0,-2.27],0.72,0.0,"BathroomAsset"),
     ]{
-        commands.spawn((gltf_scene(&asset_server,path),Name::new(name),Transform{translation:Vec3::new(position[0],position[1],position[2]),rotation:Quat::from_rotation_y(yaw),scale:Vec3::splat(scale)}));
+        commands.spawn((gltf_asset(&asset_server,path),Name::new(name),Transform{translation:Vec3::new(position[0],position[1],position[2]),rotation:Quat::from_rotation_y(yaw),scale:Vec3::splat(scale)}));
     }
     for(position,yaw)in[
         ([-2.90,0.0,-1.12],std::f32::consts::FRAC_PI_2),
@@ -28,14 +47,14 @@ fn setup(
         ([-2.20,0.0,-1.88],0.0),
         ([-2.20,0.0,-0.38],std::f32::consts::PI),
     ]{
-        commands.spawn((gltf_scene(&asset_server,"furniture/chair.glb"),Name::new("DiningChairAsset"),Transform{translation:Vec3::from_array(position),rotation:Quat::from_rotation_y(yaw),scale:Vec3::ONE}));
+        commands.spawn((gltf_asset(&asset_server,"furniture/chair.glb"),Name::new("DiningChairAsset"),Transform{translation:Vec3::from_array(position),rotation:Quat::from_rotation_y(yaw),scale:Vec3::ONE}));
     }
 
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
         if !spec.available{continue;}
         let p=if profile_index==life.avatar.character{life.game.frame.position}else{life.society.residents.iter().find(|r|r.profile_index==profile_index).map(|r|r.frame.position).unwrap_or(Point::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]))};
         commands.spawn((
-            gltf_scene(&asset_server,spec.asset),CharacterRoot{profile_index},Person(profile_index as u64+1),Name::new(format!("Character:{}",spec.name)),
+            gltf_asset(&asset_server,spec.asset),CharacterRoot{profile_index},Name::new(format!("Character:{}",spec.name)),
             Transform{translation:Vec3::new(p.x as f32,p.y as f32+spec.vertical_offset,p.z as f32),rotation:Quat::from_rotation_x(spec.rotation_x),scale:Vec3::splat(spec.scale)},
         ));
     }
