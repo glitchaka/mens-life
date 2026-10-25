@@ -2,7 +2,7 @@ use bevy::{
     animation::{AnimationPlayer, graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex}},
     camera::{Exposure, ScalingMode},
     core_pipeline::tonemapping::Tonemapping,
-    gltf::GltfAssetLabel,
+    gltf::{Gltf, GltfAssetLabel},
     light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, NotShadowCaster, NotShadowReceiver, ShadowFilteringMethod},
     mesh::VertexAttributeValues,
     prelude::*,
@@ -28,7 +28,7 @@ use std::collections::HashMap;
 struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, poltergeist: Poltergeist, changed: bool, random: Vec<f64> }
 #[derive(Component)] struct NodeId(String);
 #[derive(Component)] struct Furniture(Task);
-#[derive(Component)] struct Person(u64);
+#[derive(Component)] struct PendingGltf(Handle<Gltf>);
 #[derive(Component)] struct CharacterRoot { profile_index: usize }
 #[derive(Component)] struct CameraRig;
 #[derive(Clone, Copy, Component, PartialEq, Eq)] enum CutawaySide { Roof, East, West, North, South }
@@ -58,7 +58,7 @@ pub fn run(){
         .add_systems(Startup,setup)
         .add_systems(PreUpdate,configure_interface.after(EguiPreUpdateSet::InitContexts).before(EguiPreUpdateSet::BeginPass))
         .add_systems(EguiPrimaryContextPass,interface)
-        .add_systems(Update,(apply_selection,advance,perceive_world,tag_cutaway_parts,setup_character_animations,rotate_camera,animate,pick,capture_frame).chain())
+        .add_systems(Update,(apply_selection,advance,perceive_world,resolve_gltf,tag_cutaway_parts,setup_character_animations,rotate_camera,animate,pick,capture_frame).chain())
         .run();
 }
 include!("native_scene.inc.rs");
