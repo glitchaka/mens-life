@@ -1,57 +1,123 @@
-//! Baked from the user-provided `House_scene_01.fbx`.
-//! The FBX geometry is flattened into low-poly triangles; colors are sampled from its original texture maps.
+//! Compact meshes derived directly from the user-provided `House_scene_01.fbx`.
+//! The property mesh keeps the house, veranda, exterior ground/patio and vegetation.
 use crate::geometry::Geometry;
 
-const POSITION_SCALE: f32 = 1.0 / 4096.0;
-const LOWER: &[&str] = &[
-    include_str!("house_data/lower_0.txt"),
-    include_str!("house_data/lower_1.txt"),
-    include_str!("house_data/lower_2.txt"),
-    include_str!("house_data/lower_3.txt"),
+const POSITION_SCALE: f32 = 1.0 / 2048.0;
+const PROPERTY: &[&str] = &[
+    include_str!("model_data/house_00.txt"),
+    include_str!("model_data/house_01.txt"),
+    include_str!("model_data/house_02.txt"),
+    include_str!("model_data/house_03.txt"),
 ];
-const UPPER: &[&str] = &[
-    include_str!("house_data/upper_0.txt"),
-    include_str!("house_data/upper_1.txt"),
-];
+const ROOF: &[&str] = &[include_str!("model_data/house_roof.txt")];
 
-fn sextet(b: u8) -> Option<u8> {
-    match b {
-        b'A'..=b'Z' => Some(b-b'A'), b'a'..=b'z' => Some(b-b'a'+26),
-        b'0'..=b'9' => Some(b-b'0'+52), b'+' => Some(62), b'/' => Some(63), _ => None,
+fn sextet(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
     }
 }
 
 fn decode64(chunks: &[&str]) -> Vec<u8> {
-    let capacity=chunks.iter().map(|s| s.len()).sum::<usize>()*3/4;
-    let mut out=Vec::with_capacity(capacity); let mut acc=0u32; let mut bits=0u8;
-    for input in chunks {
-        for b in input.bytes() {
-            if b==b'=' { break; }
-            let Some(v)=sextet(b) else { continue; };
-            acc=(acc<<6)|v as u32; bits+=6;
-            if bits>=8 { bits-=8; out.push((acc>>bits) as u8); acc &= (1u32<<bits)-1; }
+    let mut out = Vec::with_capacity(chunks.iter().map(|chunk| chunk.len()).sum::<usize>() * 3 / 4);
+    let mut acc = 0u32;
+    let mut bits = 0u8;
+    for chunk in chunks {
+        for byte in chunk.bytes() {
+            if byte == b'=' { continue; }
+            let Some(value) = sextet(byte) else { continue; };
+            acc = (acc << 6) | value as u32;
+            bits += 6;
+            while bits >= 8 {
+                bits -= 8;
+                out.push((acc >> bits) as u8);
+                acc &= if bits == 0 { 0 } else { (1u32 << bits) - 1 };
+            }
         }
     }
     out
 }
 
-fn unpack(encoded: &[&str]) -> Geometry {
-    let bytes=decode64(encoded); const RECORD:usize=25; let triangles=bytes.len()/RECORD;
-    let mut positions=Vec::with_capacity(triangles*3); let mut normals=Vec::with_capacity(triangles*3);
-    let mut colors=Vec::with_capacity(triangles*3); let mut indices=Vec::with_capacity(triangles*3);
-    for chunk in bytes.chunks_exact(RECORD) {
-        let mut at=0usize; let mut tri=[[0.0f32;3];3];
-        for p in &mut tri { for axis in 0..3 {
-            let q=i16::from_le_bytes([chunk[at],chunk[at+1]]); at+=2; p[axis]=q as f32*POSITION_SCALE;
-        } }
-        let n=[chunk[18] as i8 as f32/127.0,chunk[19] as i8 as f32/127.0,chunk[20] as i8 as f32/127.0];
-        let c=[chunk[21] as f32/255.0,chunk[22] as f32/255.0,chunk[23] as f32/255.0,chunk[24] as f32/255.0];
-        for p in tri { positions.push(p); normals.push(n); colors.push(c); indices.push(indices.len() as u32); }
-    }
-    Geometry::from_raw(positions,normals,Vec::new(),colors,indices)
+fn u32_at(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(bytes[at..at + 4].try_into().expect("house mesh u32"))
+}
+fn i16_at(bytes: &[u8], at: usize) -> i16 {
+    i16::from_le_bytes(bytes[at..at + 2].try_into().expect("house mesh i16"))
+}
+fn u16_at(bytes: &[u8], at: usize) -> u16 {
+    u16::from_le_bytes(bytes[at..at + 2].try_into().expect("house mesh u16"))
 }
 
-/// Playable cutaway/lower shell, including the exterior ground/patio baked from the supplied FBX.
-pub fn lower() -> Geometry { unpack(LOWER) }
-/// Upper/roof section kept available for future camera/roof toggling.
-pub fn upper() -> Geometry { unpack(UPPER) }
+fn unpack(chunks: &[&str]) -> Geometry {
+    let bytes = decode64(chunks);
+    assert!(bytes.len() >= 8, "supplied house mesh is incomplete");
+    let vertex_count = u32_at(&bytes, 0) as usize;
+    let index_count = u32_at(&bytes, 4) as usize;
+    let expected = 8 + vertex_count * 10 + index_count * 2;
+    assert!(bytes.len() >= expected, "supplied house mesh data was truncated");
+
+    let mut positions = Vec::with_capacity(vertex_count);
+    let mut colors = Vec::with_capacity(vertex_count);
+    let mut at = 8usize;
+    for _ in 0..vertex_count {
+        positions.push([
+            i16_at(&bytes, at) as f32 * POSITION_SCALE,
+            i16_at(&bytes, at + 2) as f32 * POSITION_SCALE,
+            i16_at(&bytes, at + 4) as f32 * POSITION_SCALE,
+        ]);
+        colors.push([
+            bytes[at + 6] as f32 / 255.0,
+            bytes[at + 7] as f32 / 255.0,
+            bytes[at + 8] as f32 / 255.0,
+            bytes[at + 9] as f32 / 255.0,
+        ]);
+        at += 10;
+    }
+
+    let mut indices = Vec::with_capacity(index_count);
+    for _ in 0..index_count {
+        indices.push(u16_at(&bytes, at) as u32);
+        at += 2;
+    }
+
+    let mut normals = vec![[0.0f32; 3]; vertex_count];
+    for triangle in indices.chunks_exact(3) {
+        let a = positions[triangle[0] as usize];
+        let b = positions[triangle[1] as usize];
+        let c = positions[triangle[2] as usize];
+        let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        for &index in triangle {
+            let normal = &mut normals[index as usize];
+            normal[0] += n[0];
+            normal[1] += n[1];
+            normal[2] += n[2];
+        }
+    }
+    for normal in &mut normals {
+        let length = (normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]).sqrt();
+        if length > 1e-8 {
+            normal[0] /= length;
+            normal[1] /= length;
+            normal[2] /= length;
+        } else {
+            *normal = [0.0, 1.0, 0.0];
+        }
+    }
+
+    Geometry::from_raw(positions, normals, Vec::new(), colors, indices)
+}
+
+/// House, veranda, exterior ground/patio and vegetation from the supplied FBX.
+pub fn lower() -> Geometry { unpack(PROPERTY) }
+/// Original upper/roof geometry, separated only so gameplay can reveal the interior.
+pub fn upper() -> Geometry { unpack(ROOF) }
