@@ -37,6 +37,8 @@ struct Furniture(Task);
 struct Person(u64);
 #[derive(Component)]
 struct Girl;
+#[derive(Component)]
+struct HouseUpper;
 #[derive(Resource, Default)]
 struct Materials(HashMap<String, Handle<StandardMaterial>>);
 #[derive(Resource, Default)]
