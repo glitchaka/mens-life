@@ -34,6 +34,9 @@ typedef struct ml_psych_state {
 
 ml_brain* ml_brain_create(uint64_t seed, char* error, size_t capacity) ML_NOEXCEPT;
 ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, char* error, size_t capacity) ML_NOEXCEPT;
+/* Creates one MSPA agent with a catalog personality profile (1..6). */
+ml_brain* ml_brain_create_profile(uint64_t seed, uint64_t agent_id, uint64_t profile_id,
+                                  char* error, size_t capacity) ML_NOEXCEPT;
 void ml_brain_destroy(ml_brain* brain) ML_NOEXCEPT;
 int32_t ml_brain_update(ml_brain* brain, uint64_t ticks, const float values[5]) ML_NOEXCEPT;
 int32_t ml_brain_decide(ml_brain* brain, const ml_option* options, size_t count,
