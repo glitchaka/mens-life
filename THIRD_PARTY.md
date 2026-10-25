@@ -1,8 +1,8 @@
 # Dependencias
 
-MSPA-Lib 1.0.0, de `glitchaka/MSPA-Lib`, revisión
-`4532daf43a4ffa0a2b7abb8cace29ba53a9b8d89`, se incluye sin modificaciones
-en `vendor/MSPA-Lib` y se enlaza estáticamente. Su origen y revisión están
+MSPA-Lib 1.1.1, de `glitchaka/MSPA-Lib`, revisión
+`9b217dc387a3b0e0152cac161da2ef44ff3677cb`, se incluye en
+`vendor/MSPA-Lib` y se enlaza estáticamente. Su origen y revisión están
 en `vendor/MSPA-Lib/UPSTREAM.md`. Esa revisión del repositorio original no
 incluye un archivo de licencia; se conserva su atribución y documentación.
 El adaptador del juego queda fuera de la biblioteca original, en `native/`.

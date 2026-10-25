@@ -22,6 +22,8 @@
 #include "mspa/psychology/memory.hpp"
 #include "mspa/psychology/mood.hpp"
 #include "mspa/psychology/personality.hpp"
+#include "mspa/psychology/profile.hpp"
+#include "mspa/psychology/profile_runtime.hpp"
 #include "mspa/psychology/reappraisal.hpp"
 #include "mspa/psychology/relationships.hpp"
 #include "mspa/psychology/values.hpp"
