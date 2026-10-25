@@ -13,7 +13,7 @@ use bevy::{
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
 use mens_life::{
     game::{Game, Navigation, Task, Vec3 as Point},
-    geometry, mspa_ui, packed_mesh, perception,
+    geometry, house_asset, mspa_ui, packed_mesh, perception,
     scene::{self, Avatar},
     society::Society,
     ui,
@@ -79,7 +79,6 @@ pub fn run() {
     let random=(0..90).map(|_|{seed=seed.wrapping_mul(6364136223846793005).wrapping_add(1);(seed>>11) as f64/(1u64<<53) as f64}).collect::<Vec<_>>();
     let avatar=Avatar::default(); let spec=scene::build(&avatar,&random);
     let mut game=Game::new(Navigation::new(geometry::navigation_bounds(&spec)),spec.drops_y);
-    // The supplied girl is the fixed protagonist model; there is no character creator/procedural avatar.
     game.creator=false;
     let society=Society::new(&game.navigation);
     App::new()
