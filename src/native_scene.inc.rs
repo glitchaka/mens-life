@@ -14,13 +14,14 @@ fn setup(
     // Original house asset. No procedural replacement and no packed/rebuilt mesh.
     commands.spawn((gltf_scene(&asset_server,"house/house.glb"),Name::new("AutumnHouse"),Transform::IDENTITY));
 
-    // User-provided furniture. Transform scale is the only geometric adjustment.
+    // User-provided furniture. Geometry stays untouched; only scene transforms normalize scale/origin.
     for(path,position,scale,yaw,name)in[
         ("furniture/bed.glb",[-4.03,0.0,2.08],0.80,0.0,"BedAsset"),
         ("furniture/sofa.glb",[-3.67,0.0,0.35],0.72,0.0,"SofaAsset"),
         ("furniture/small_table.glb",[-2.55,0.0,0.38],0.72,0.0,"SmallTableAsset"),
-        ("furniture/classic_table.glb",[-2.20,0.0,-1.12],0.75,0.0,"DiningTableAsset"),
-        ("furniture/bathroom.glb",[-4.02,0.0,-2.27],0.55,0.0,"BathroomAsset"),
+        // This model's origin is at its top: +0.654 puts its measured bottom on the floor.
+        ("furniture/classic_table.glb",[-2.20,0.654,-1.12],0.75,0.0,"DiningTableAsset"),
+        ("furniture/bathroom.glb",[-4.02,0.0,-2.27],0.72,0.0,"BathroomAsset"),
     ]{
         commands.spawn((gltf_scene(&asset_server,path),Name::new(name),Transform{translation:Vec3::new(position[0],position[1],position[2]),rotation:Quat::from_rotation_y(yaw),scale:Vec3::splat(scale)}));
     }
