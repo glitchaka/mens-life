@@ -9,7 +9,14 @@ fn apply_selection(mut life:ResMut<Life>){
 
 fn advance(time:Res<Time>,mut life:ResMut<Life>,capture:Res<Capture>,keys:Res<ButtonInput<KeyCode>>){
     if keys.just_pressed(KeyCode::Space){life.game.paused=!life.game.paused;}
-    if capture.path.is_none(){let dt=time.delta_secs_f64();life.game.tick(dt,time.elapsed_secs_f64()*1000.0);let Life{game,society,..}=&mut *life;society.tick(game,dt);}
+    if capture.path.is_none(){
+        let dt=time.delta_secs_f64();
+        life.game.tick(dt,time.elapsed_secs_f64()*1000.0);
+        let profile=life.avatar.character;
+        let Life{game,society,haunting,..}=&mut *life;
+        society.tick(game,dt);
+        haunting.tick(game,society,profile,dt);
+    }
 }
 fn perceive_world(mut life:ResMut<Life>,mut awareness:Local<perception::WorldAwareness>){let Life{game,society,..}=&mut *life;perception::observe(game,society,&mut awareness);}
 
@@ -96,6 +103,19 @@ fn animate(
             if let Some(node)=if wants_walk{controller.walk}else{controller.idle.or(controller.walk)}{player.play(node).repeat();}
         }else if player.all_finished(){if let Some(node)=if wants_walk{controller.walk}else{controller.idle.or(controller.walk)}{player.play(node).repeat();}}
     }
-    for(id,mut t,mut v)in &mut nodes{match id.0.as_str(){"drops"=>*v=if life.game.frame.drops{Visibility::Inherited}else{Visibility::Hidden},s if s.starts_with("drop-")=>{let i=s[5..].parse::<usize>().unwrap();t.translation.y=life.game.drops_y[i]as f32;},_=>{}}}
+    for(id,mut t,mut v)in &mut nodes{
+        match id.0.as_str(){
+            "drops"=>*v=if life.game.frame.drops{Visibility::Inherited}else{Visibility::Hidden},
+            s if s.starts_with("drop-")=>{let i=s[5..].parse::<usize>().unwrap();t.translation.y=life.game.drops_y[i]as f32;},
+            s if s.starts_with("specter-root-")=>{
+                let index=s[13..].parse::<usize>().unwrap_or(0);
+                *v=if life.haunting.specter_visible(index,life.game.game_time){Visibility::Inherited}else{Visibility::Hidden};
+                let p=life.haunting.specter_position(index,life.game.game_time);
+                t.translation=Vec3::from_array(p);
+                t.rotation=Quat::from_rotation_y(((life.game.game_time*0.22)as f32+index as f32*1.7).sin()*0.24);
+            },
+            _=>{}
+        }
+    }
     if let Some(mat)=shared.0.get("tv-screen").and_then(|h|materials.get_mut(h)){mat.base_color=rgb(if life.game.frame.watching{0x79a7d3}else{0x17212b});mat.emissive=Color::hsl(life.game.frame.screen_hue as f32*360.0,0.4,if life.game.frame.watching{0.4}else{0.03}).to_linear();}
 }
