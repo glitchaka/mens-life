@@ -22,7 +22,7 @@ fn tag_cutaway_parts(mut commands:Commands,names:Query<(Entity,&Name),Added<Name
 }
 
 fn find_character_root(mut entity:Entity,parents:&Query<&ChildOf>,roots:&Query<&CharacterRoot>)->Option<usize>{
-    loop{if let Ok(root)=roots.get(entity){return Some(root.profile_index);}entity=parents.get(entity).ok()?.0;}
+    loop{if let Ok(root)=roots.get(entity){return Some(root.profile_index);}entity=parents.get(entity).ok()?.parent();}
 }
 
 fn setup_character_animations(
@@ -82,7 +82,7 @@ fn animate(
         let frame=if root.profile_index==life.avatar.character{Some(&life.game.frame)}else{life.society.residents.iter().find(|r|r.profile_index==root.profile_index).map(|r|&r.frame)};
         let Some(frame)=frame else{continue;};
         let moving=if root.profile_index==life.avatar.character{life.game.phase==game::Phase::Walking}else{life.society.residents.iter().find(|r|r.profile_index==root.profile_index).is_some_and(|r|r.action.starts_with("Paseando"))};
-        let bob=if spec.walk_animation.is_none()&&moving{(life.game.walk_time as f32*8.0).sin().abs()*0.015}else{0.0};
+        let bob=if spec.walk_animation.is_none()&&moving{(life.game.game_time as f32*8.0).sin().abs()*0.015}else{0.0};
         transform.translation=Vec3::new(frame.position.x as f32,frame.position.y as f32+spec.vertical_offset+bob,frame.position.z as f32);
         let pose=Quat::from_euler(EulerRot::XYZ,frame.rotation[0]as f32,frame.rotation[1]as f32,frame.rotation[2]as f32);
         transform.rotation=pose*Quat::from_rotation_x(spec.rotation_x);
