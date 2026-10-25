@@ -25,13 +25,29 @@ void copy_text(const char* text, char* output, size_t capacity) noexcept {
     output[length] = '\0';
 }
 
+mspa::Personality personality_for(uint64_t profile_id) {
+    mspa::Personality p;
+    const std::array<std::array<float, 6>, 6> profiles{{
+        {{0.70f,0.72f,0.80f,0.58f,0.74f,0.54f}},
+        {{0.86f,0.54f,0.64f,0.46f,0.86f,0.82f}},
+        {{0.78f,0.38f,0.34f,0.64f,0.58f,0.90f}},
+        {{0.56f,0.84f,0.84f,0.74f,0.54f,0.40f}},
+        {{0.66f,0.62f,0.56f,0.66f,0.78f,0.62f}},
+        {{0.86f,0.56f,0.88f,0.48f,0.72f,0.74f}},
+    }};
+    const auto& v = profiles[std::clamp<uint64_t>(profile_id, 1, profiles.size()) - 1];
+    p.sociability=v[0]; p.stability=v[1]; p.empathy=v[2];
+    p.persistence=v[3]; p.curiosity=v[4]; p.boldness=v[5];
+    return p;
+}
+
 mspa::DomainPack house_pack() {
     mspa::DomainPack pack;
     pack.metadata.id = mspa::PackId{1};
     pack.metadata.name_space = domain;
     pack.metadata.name = "mens-life.house";
-    pack.context_tags = {"house", "care", "leisure", "interrupted", "environment"};
-    pack.outcome_tags = {"success", "blocked", "need_restored", "noticed"};
+    pack.context_tags = {"house", "care", "leisure", "interrupted", "environment", "social"};
+    pack.outcome_tags = {"success", "blocked", "need_restored", "noticed", "positive_contact", "interrupted_contact"};
     for (uint64_t i = 0; i < 5; ++i) {
         const auto concept = mspa::ConceptId{i + 1};
         pack.concepts.push_back({concept, names[i]});
@@ -107,7 +123,6 @@ struct ml_brain {
         p.arguments.push_back(std::move(subject));
         return p;
     }
-
     void observe(int task, int kind, bool positive = true) {
         mspa::ObserveInput input;
         input.agent = character;
@@ -117,25 +132,20 @@ struct ml_brain {
         input.source_trust = 1;
         require(runtime->observe(input));
     }
-
     template <typename F> int32_t guarded(F operation) noexcept {
-        try {
-            operation();
-            error[0] = '\0';
-            return 1;
-        } catch (const std::exception& exception) {
-            copy_text(exception.what(), error.data(), error.size());
-        } catch (...) {
-            copy_text("Unknown MSPA bridge error", error.data(), error.size());
-        }
+        try { operation(); error[0] = '\0'; return 1; }
+        catch (const std::exception& exception) { copy_text(exception.what(), error.data(), error.size()); }
+        catch (...) { copy_text("Unknown MSPA bridge error", error.data(), error.size()); }
         return 0;
     }
 };
 
-extern "C" ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, char* error, size_t capacity) noexcept {
+extern "C" ml_brain* ml_brain_create_profile(uint64_t seed, uint64_t agent_id, uint64_t profile_id,
+                                                char* error, size_t capacity) noexcept {
     try {
         auto brain = std::make_unique<ml_brain>();
         if (!agent_id) throw std::runtime_error("Invalid character identity");
+        if (profile_id < 1 || profile_id > 6) throw std::runtime_error("Invalid personality profile");
         brain->character = {world, agent_id};
         mspa::RegistryBuilder builder;
         require(mspa::apply_domain_pack(builder, house_pack()));
@@ -153,10 +163,8 @@ extern "C" ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, cha
         require(created);
         brain->runtime = std::move(*created.value_if());
         mspa::AgentInit init;
-        init.personality = {0.5f, 0.65f, 0.6f, 0.65f, 0.55f, 0.5f};
-        if (agent_id == 2) init.personality = {0.78f,0.65f,0.75f,0.55f,0.7f,0.62f};
-        if (agent_id == 3) init.personality = {0.62f,0.72f,0.6f,0.7f,0.6f,0.72f};
-        for (uint64_t other = 1; other <= 3; ++other) {
+        init.personality = personality_for(profile_id);
+        for (uint64_t other = 1; other <= 6; ++other) {
             if (other != agent_id) init.relationships.push_back({{world,other},0.0f,0.1f,0.1f,0.0f});
         }
         init.use_registry_default_values = true;
@@ -171,16 +179,16 @@ extern "C" ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, cha
         require(brain->runtime->create_agent(brain->character, init, brain->now));
         copy_text("", error, capacity);
         return brain.release();
-    } catch (const std::exception& exception) {
-        copy_text(exception.what(), error, capacity);
-    } catch (...) {
-        copy_text("Cannot create MSPA runtime", error, capacity);
-    }
+    } catch (const std::exception& exception) { copy_text(exception.what(), error, capacity); }
+      catch (...) { copy_text("Cannot create MSPA runtime", error, capacity); }
     return nullptr;
 }
 
+extern "C" ml_brain* ml_brain_create_agent(uint64_t seed, uint64_t agent_id, char* error, size_t capacity) noexcept {
+    return ml_brain_create_profile(seed, agent_id, std::clamp<uint64_t>(agent_id, 1, 6), error, capacity);
+}
 extern "C" ml_brain* ml_brain_create(uint64_t seed, char* error, size_t capacity) noexcept {
-    return ml_brain_create_agent(seed, 1, error, capacity);
+    return ml_brain_create_profile(seed, 1, 1, error, capacity);
 }
 extern "C" void ml_brain_destroy(ml_brain* brain) noexcept { delete brain; }
 
@@ -218,8 +226,7 @@ extern "C" int32_t ml_brain_decide(ml_brain* brain, const ml_option* offered, si
         std::vector<mspa::ActionOption> options;
         const auto base = ++brain->sequence * 8;
         for (size_t i = 0; i < count; ++i) {
-            if (offered[i].task < -1 || offered[i].task > 4)
-                throw std::runtime_error("Invalid offered activity");
+            if (offered[i].task < -1 || offered[i].task > 4) throw std::runtime_error("Invalid offered activity");
             const uint64_t key = offered[i].task < 0 ? 6 : uint64_t(offered[i].task + 1);
             mspa::ActionOption option;
             option.type = mspa::ActionTypeId{key};
@@ -235,13 +242,10 @@ extern "C" int32_t ml_brain_decide(ml_brain* brain, const ml_option* offered, si
                 option.expected_effects.push_back({mspa::EffectChannel::Need, concept, {}, 1.4f, "need_restored"});
                 option.expected_effects.push_back({mspa::EffectChannel::Value, concept, {}, 0.08f, {}});
                 option.expected_effects.push_back({mspa::EffectChannel::Goal, concept, {}, 0.08f, {}});
-            } else {
-                option.expected_effects.push_back({mspa::EffectChannel::Generic, {}, {}, 0.22f, {}});
-            }
+            } else option.expected_effects.push_back({mspa::EffectChannel::Generic, {}, {}, 0.22f, {}});
             options.push_back(std::move(option));
         }
-        const auto continuity = current >= 0 ? mspa::ActionContinuityKey{uint64_t(current + 1)}
-                                            : mspa::ActionContinuityKey{};
+        const auto continuity = current >= 0 ? mspa::ActionContinuityKey{uint64_t(current + 1)} : mspa::ActionContinuityKey{};
         auto decision = brain->runtime->decide(brain->character, options, context, brain->now, continuity);
         require(decision);
         *selected = -1;
@@ -257,19 +261,16 @@ extern "C" int32_t ml_brain_decide(ml_brain* brain, const ml_option* offered, si
 extern "C" int32_t ml_brain_event(ml_brain* brain, int32_t task, int32_t kind) noexcept {
     if (!brain || task < 0 || task >= 5 || kind < 0 || kind > 3) return 0;
     return brain->guarded([&] {
-        if (kind == 0) {
-            brain->observe(task, 3);
-        } else if (kind == 3) {
-            brain->observe(task, 6);
-        } else {
+        if (kind == 0) brain->observe(task, 3);
+        else if (kind == 3) brain->observe(task, 6);
+        else {
             mspa::ReportInput report;
             report.agent = brain->character;
             report.action_type = mspa::ActionTypeId{uint64_t(task + 1)};
             report.process_time = brain->now;
             report.success = kind == 1;
             report.context_tags = {"house", task == 3 ? "leisure" : "care"};
-            report.outcome_tags = kind == 1 ? std::vector<std::string>{"success", "need_restored"}
-                                          : std::vector<std::string>{"blocked"};
+            report.outcome_tags = kind == 1 ? std::vector<std::string>{"success", "need_restored"} : std::vector<std::string>{"blocked"};
             report.resulting_propositions.push_back(brain->proposition(task, kind == 1 ? 4 : 5));
             require(brain->runtime->report(report));
         }
@@ -305,8 +306,7 @@ extern "C" int32_t ml_brain_state(const ml_brain* brain, ml_psych_state* output)
     const auto* state = brain->runtime->agents().find(brain->character);
     if (!state) return 0;
     *output = {};
-    for (const auto& emotion : state->emotions)
-        output->emotions[static_cast<size_t>(emotion.kind)] = emotion.intensity;
+    for (const auto& emotion : state->emotions) output->emotions[static_cast<size_t>(emotion.kind)] = emotion.intensity;
     output->valence = state->mood.valence;
     output->activation = state->mood.activation;
     output->confidence = brain->confidence;
@@ -359,9 +359,7 @@ extern "C" int32_t ml_brain_social_decide(ml_brain* brain, uint64_t target, int3
             options.push_back(std::move(option));
         }
         mspa::ActionOption rest;
-        rest.type = mspa::ActionTypeId{6};
-        rest.instance = mspa::ActionInstanceId{base+4};
-        rest.actor = brain->character;
+        rest.type = mspa::ActionTypeId{6}; rest.instance = mspa::ActionInstanceId{base+4}; rest.actor = brain->character;
         rest.expected_effects.push_back({mspa::EffectChannel::Generic,{}, {},0.2f,{}});
         options.push_back(rest);
         auto decision = brain->runtime->decide(brain->character,options,brain->now);
@@ -385,12 +383,9 @@ extern "C" int32_t ml_brain_social_report(ml_brain* brain, uint64_t target, int3
         p.predicate = mspa::PredicateId{uint64_t(success ? 1000+kind : 1003)};
         p.name_space = domain;
         p.provenance = "mens-life:completed-social-interaction";
-        mspa::PropositionArg subject;
-        subject.role = "subject"; subject.has_agent = true; subject.agent = brain->character;
-        mspa::PropositionArg other;
-        other.role = "other"; other.has_agent = true; other.agent = {world,target};
-        p.arguments = {subject,other};
-        report.resulting_propositions.push_back(p);
+        mspa::PropositionArg subject; subject.role = "subject"; subject.has_agent = true; subject.agent = brain->character;
+        mspa::PropositionArg other; other.role = "other"; other.has_agent = true; other.agent = {world,target};
+        p.arguments = {subject,other}; report.resulting_propositions.push_back(p);
         mspa::RelationshipImpact impact;
         impact.target = {world,target};
         impact.delta = success ? mspa::RelationshipDelta{kind == 2 ? 0.06f : 0.04f,0.025f,0.015f,0.08f}
