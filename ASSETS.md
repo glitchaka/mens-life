@@ -1,11 +1,10 @@
 # Imported 3D assets
 
-The runtime deliberately loads the user-supplied GLB files directly from `assets/`; it does not reconstruct them into procedural meshes.
+The runtime deliberately loads the user-supplied GLB files directly from `assets/`; it does not reconstruct or decimate them into procedural meshes.
 
 Expected paths:
 
 - `assets/house/house.glb`
-- `assets/characters/original_girl.glb`
 - `assets/characters/mia.glb`
 - `assets/characters/kurumi.glb`
 - `assets/characters/mai.glb`
@@ -19,6 +18,8 @@ Expected paths:
 - `assets/furniture/bed.glb`
 - `assets/furniture/furniture_set.glb`
 
-The house asset preserves the supplied house/property geometry and UV/material layout. Wall and roof pieces are separated only into visibility groups so the isometric cutaway can hide the camera-facing shell while a character is indoors.
+The standing pink-shirt/blue-jeans reference character is deliberately not listed: only a reference image is available, not its actual 3D model. The rejected kneeling OBJ is never substituted for it.
 
-Character/furniture geometry, skinning and animation data are preserved. Asset sizing is handled by scene transforms. Large embedded textures may be resized for runtime memory use without decimating the meshes.
+The house asset preserves the supplied house/property geometry, patio, UV/material layout and hierarchy. Wall and roof pieces are separated only into visibility groups so the cutaway can hide the camera-facing shell while the selected resident is indoors.
+
+Character and furniture geometry, skinning and animation data are preserved. Asset sizing is handled by scene transforms. Large embedded textures may be resized for runtime memory use without decimating meshes, changing UVs, removing bones or stripping animation clips.
