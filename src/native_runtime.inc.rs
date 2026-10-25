@@ -83,6 +83,7 @@ fn animate(
     mut roots:Query<(&CharacterRoot,&mut Transform)>,
     mut players:Query<(&mut AnimationPlayer,&mut CharacterAnimation)>,
     mut nodes:Query<(&NodeId,&mut Transform,&mut Visibility),Without<CharacterRoot>>,
+    mut point_lights:Query<&mut PointLight>,
 ){
     for(root,mut transform)in &mut roots{
         let spec=character_catalog::character(root.profile_index);
@@ -116,6 +117,13 @@ fn animate(
             },
             _=>{}
         }
+    }
+    let haunting_light=life.haunting.level>=9&&life.haunting.event_remaining>0.0;
+    for mut light in &mut point_lights{
+        let wave=((life.game.game_time*31.0).sin()*0.5+0.5)as f32;
+        let factor=if haunting_light{0.18+wave*0.82}else{1.0};
+        light.intensity=18.0*std::f32::consts::TAU*2.0*factor;
+        light.color=if haunting_light&&life.haunting.level>=11{rgb(0xc9e8ee)}else{rgb(0xffd89b)};
     }
     if let Some(mat)=shared.0.get("tv-screen").and_then(|h|materials.get_mut(h)){mat.base_color=rgb(if life.game.frame.watching{0x79a7d3}else{0x17212b});mat.emissive=Color::hsl(life.game.frame.screen_hue as f32*360.0,0.4,if life.game.frame.watching{0.4}else{0.03}).to_linear();}
 }
