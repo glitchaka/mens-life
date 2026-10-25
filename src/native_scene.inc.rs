@@ -33,9 +33,10 @@ fn setup(
         commands.spawn((gltf_scene(&asset_server,"furniture/chair.glb"),Name::new("DiningChairAsset"),Transform{translation:Vec3::from_array(position),rotation:Quat::from_rotation_y(yaw),scale:Vec3::splat(0.75)}));
     }
 
-    // All six character assets exist simultaneously. The selected one is player-controlled;
-    // the other five are moved by Society only in the outdoor navigation area.
+    // Real uploaded character assets only. Selected resident stays in the house;
+    // the other available characters are moved by Society through the outdoor area.
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
+        if !spec.available{continue;}
         let p=if profile_index==life.avatar.character{life.game.frame.position}else{life.society.residents.iter().find(|r|r.profile_index==profile_index).map(|r|r.frame.position).unwrap_or(Point::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]))};
         commands.spawn((
             gltf_scene(&asset_server,spec.asset),CharacterRoot{profile_index},Person(profile_index as u64+1),Name::new(format!("Character:{}",spec.name)),
@@ -71,9 +72,10 @@ fn setup(
     for i in 0..capture.simulate{
         life.game.tick(0.05,i as f64*50.0);
         let profile=life.avatar.character;
-        let Life{game,society,haunting,..}=&mut *life;
+        let Life{game,society,haunting,poltergeist,..}=&mut *life;
         society.tick(game,0.05);
         haunting.tick(game,society,profile,0.05);
+        poltergeist.tick(0.05);
     }
 }
 
