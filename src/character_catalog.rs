@@ -15,6 +15,7 @@ pub struct CharacterSpec {
     pub key: &'static str,
     pub name: &'static str,
     pub asset: &'static str,
+    pub available: bool,
     pub scale: f32,
     pub rotation_x: f32,
     pub vertical_offset: f32,
@@ -25,17 +26,24 @@ pub struct CharacterSpec {
     pub outdoor_spawn: [f64; 3],
 }
 
+// Slot 0 keeps the personality identity reserved for the original standing-girl
+// reference. It is intentionally unavailable until its actual 3D file is supplied;
+// the rejected kneeling OBJ is never substituted for it.
 pub const CHARACTERS: [CharacterSpec; 6] = [
-    CharacterSpec { key: "original", name: "Aiko", asset: "characters/original_girl.glb", scale: 1.045, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.70, 0.72, 0.80, 0.58, 0.74, 0.54], voice: Voice::Gentle, outdoor_spawn: [3.8, 0.0, 4.6] },
-    CharacterSpec { key: "mia", name: "Mia", asset: "characters/mia.glb", scale: 1.02, rotation_x: std::f32::consts::FRAC_PI_2, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: None, personality: [0.86, 0.54, 0.64, 0.46, 0.86, 0.82], voice: Voice::Excitable, outdoor_spawn: [5.0, 0.0, -3.6] },
-    CharacterSpec { key: "kurumi", name: "Kurumi", asset: "characters/kurumi.glb", scale: 0.465, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.78, 0.38, 0.34, 0.64, 0.58, 0.90], voice: Voice::SharpSchoolgirl, outdoor_spawn: [1.6, 0.0, -5.0] },
-    CharacterSpec { key: "mai", name: "Mai", asset: "characters/mai.glb", scale: 0.476, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.56, 0.84, 0.84, 0.74, 0.54, 0.40], voice: Voice::Reserved, outdoor_spawn: [-5.2, 0.0, -4.5] },
-    CharacterSpec { key: "outfits", name: "Rin", asset: "characters/outfits.glb", scale: 0.0147, rotation_x: 0.0, vertical_offset: 0.78, idle_animation: Some(0), walk_animation: None, personality: [0.66, 0.62, 0.56, 0.66, 0.78, 0.62], voice: Voice::Playful, outdoor_spawn: [-5.2, 0.0, 4.5] },
-    CharacterSpec { key: "schoolgirl_sweet", name: "Yui", asset: "characters/yui.glb", scale: 0.89, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.86, 0.56, 0.88, 0.48, 0.72, 0.74], voice: Voice::SweetSchoolgirl, outdoor_spawn: [5.4, 0.0, 2.2] },
+    CharacterSpec { key: "original", name: "Aiko", asset: "characters/original_girl.glb", available: false, scale: 1.0, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.70, 0.72, 0.80, 0.58, 0.74, 0.54], voice: Voice::Gentle, outdoor_spawn: [3.8, 0.0, 4.6] },
+    CharacterSpec { key: "mia", name: "Mia", asset: "characters/mia.glb", available: true, scale: 1.02, rotation_x: std::f32::consts::FRAC_PI_2, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: None, personality: [0.86, 0.54, 0.64, 0.46, 0.86, 0.82], voice: Voice::Excitable, outdoor_spawn: [5.0, 0.0, -3.6] },
+    CharacterSpec { key: "kurumi", name: "Kurumi", asset: "characters/kurumi.glb", available: true, scale: 0.465, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.78, 0.38, 0.34, 0.64, 0.58, 0.90], voice: Voice::SharpSchoolgirl, outdoor_spawn: [1.6, 0.0, -5.0] },
+    CharacterSpec { key: "mai", name: "Mai", asset: "characters/mai.glb", available: true, scale: 0.476, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.56, 0.84, 0.84, 0.74, 0.54, 0.40], voice: Voice::Reserved, outdoor_spawn: [-5.2, 0.0, -4.5] },
+    CharacterSpec { key: "outfits", name: "Rin", asset: "characters/outfits.glb", available: true, scale: 0.0147, rotation_x: 0.0, vertical_offset: 0.78, idle_animation: Some(0), walk_animation: None, personality: [0.66, 0.62, 0.56, 0.66, 0.78, 0.62], voice: Voice::Playful, outdoor_spawn: [-5.2, 0.0, 4.5] },
+    CharacterSpec { key: "schoolgirl_sweet", name: "Yui", asset: "characters/yui.glb", available: true, scale: 0.89, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.86, 0.56, 0.88, 0.48, 0.72, 0.74], voice: Voice::SweetSchoolgirl, outdoor_spawn: [5.4, 0.0, 2.2] },
 ];
 
 pub fn character(index: usize) -> &'static CharacterSpec {
     &CHARACTERS[index.min(CHARACTERS.len() - 1)]
+}
+
+pub fn available_characters() -> impl Iterator<Item = (usize, &'static CharacterSpec)> {
+    CHARACTERS.iter().enumerate().filter(|(_, spec)| spec.available)
 }
 
 pub fn dialogue(index: usize, kind: SocialKind, turn: u8) -> &'static str {
