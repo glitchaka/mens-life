@@ -65,6 +65,8 @@ pub fn run(){
     let avatar=Avatar::default();let spec=scene::build(&avatar,&random);let mut game=Game::new(Navigation::new(geometry::navigation_bounds(&spec)),spec.drops_y);game.set_profile(avatar.character as u64+1);game.creator=!capture.skip_creator;let society=Society::new(&game.navigation,avatar.character);
     let assets=asset_root();
     App::new()
+        .register_type::<Transform>()
+        .register_type::<GlobalTransform>()
         .insert_resource(Life{game,avatar,society,haunting:Haunting::default(),poltergeist:Poltergeist::default(),changed:false,random})
         .insert_resource(capture).insert_resource(CameraOrbit::default())
         .insert_resource(ClearColor(rgb(0x9ec7d0))).insert_resource(AmbientLight{color:rgb(0xfff6df),brightness:1.6,..default()}).insert_resource(DirectionalLightShadowMap{size:2048}).init_resource::<Materials>()
