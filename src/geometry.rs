@@ -1,4 +1,4 @@
-//! Native triangle meshes used by the scene, characters, interaction proxies and baked house asset.
+//! Native triangle meshes used by the scene and interaction proxies.
 use crate::{
     game::{Bounds, Vec3 as Point},
     scene::SceneSpec,
@@ -262,12 +262,6 @@ fn loft(args: &[f64]) -> Geometry {
 }
 pub fn build(node: &Value) -> Geometry {
     let kind = node["kind"].as_str().unwrap();
-    if kind == "house-lower" {
-        return crate::house_asset::lower();
-    }
-    if kind == "house-upper" {
-        return crate::house_asset::upper();
-    }
     let args: Vec<f64> = node["args"]
         .as_array()
         .unwrap()
