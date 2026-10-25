@@ -6,11 +6,16 @@ fn setup(
     mut life: ResMut<Life>,
     capture: Res<Capture>,
 ) {
-    // Visible architecture: direct baked derivative of the supplied FBX, including yard/patio.
+    // Visible architecture: the cutaway/lower shell baked directly from the supplied FBX.
+    // This includes the exterior ground/patio; nothing procedural replaces the house.
     let house_material=materials.add(StandardMaterial{base_color:Color::WHITE,perceptual_roughness:0.9,..default()});
-    commands.spawn((Mesh3d(meshes.add(packed_mesh::house())),MeshMaterial3d(house_material),Transform::IDENTITY));
+    commands.spawn((
+        Mesh3d(meshes.add(house_asset::lower().mesh())),
+        MeshMaterial3d(house_material),
+        Transform::IDENTITY,
+    ));
 
-    // Only visible person: direct baked derivative of the supplied girl OBJ.
+    // Only visible person: compact derivative of the supplied girl OBJ.
     let girl_material=materials.add(StandardMaterial{base_color:Color::WHITE,perceptual_roughness:0.88,..default()});
     let p=life.game.frame.position;
     commands.spawn((Girl,Person(1),Mesh3d(meshes.add(packed_mesh::girl())),MeshMaterial3d(girl_material),Transform::from_xyz(p.x as f32,p.y as f32,p.z as f32)));
@@ -42,10 +47,10 @@ fn setup(
 
     commands.spawn((DirectionalLight{color:rgb(0xfff0cf),illuminance:3.3,shadows_enabled:true,shadow_depth_bias:0.02,shadow_normal_bias:1.8,..default()},
         CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:55.0,..default()}.build(),
-        Transform::from_xyz(-8.0,18.0,11.0).looking_at(Vec3::new(2.0,0.0,0.0),Vec3::Y)));
+        Transform::from_xyz(-8.0,18.0,11.0).looking_at(Vec3::new(-1.0,0.0,-0.5),Vec3::Y)));
     commands.spawn((PointLight{color:rgb(0xffd89b),intensity:18.0*std::f32::consts::TAU*2.0,range:9.0,..default()},Transform::from_xyz(0.2,2.7,0.1)));
-    commands.spawn((Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:27.0,min_height:17.0},..OrthographicProjection::default_3d()}),
-        Transform::from_xyz(20.0,20.0,21.0).looking_at(Vec3::new(3.2,0.0,-0.4),Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,
+    commands.spawn((Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:20.0,min_height:14.0},..OrthographicProjection::default_3d()}),
+        Transform::from_xyz(16.0,18.0,19.0).looking_at(Vec3::new(-1.0,0.0,-0.5),Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,
         DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:30.0,end:55.0},..default()}));
 
     if let Some(task)=capture.task { life.game.command(task); }
