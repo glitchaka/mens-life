@@ -48,7 +48,7 @@ pub fn run(){
     while let Some(arg)=args.next(){match arg.as_str(){"--capture"=>capture.path=args.next(),"--start"=>capture.skip_creator=true,"--task"=>capture.task=args.next().and_then(|s|Task::parse(&s)),"--simulate"=>capture.simulate=args.next().and_then(|s|s.parse().ok()).unwrap_or(0),"--help"=>{println!("Vida Isométrica 3D\n  cargo run --release\n  --capture archivo.png [--start] [--task bed|tv|shower|toilet|eat] [--simulate frames]");return;},_=>{eprintln!("Argumento desconocido: {arg}");std::process::exit(2);}}}
     let mut seed=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()as u64;
     let random=(0..90).map(|_|{seed=seed.wrapping_mul(6364136223846793005).wrapping_add(1);(seed>>11)as f64/(1u64<<53)as f64}).collect::<Vec<_>>();
-    let avatar=Avatar::default();let spec=scene::build(&avatar,&random);let mut game=Game::new(Navigation::new(geometry::navigation_bounds(&spec)),spec.drops_y);game.creator=!capture.skip_creator;let society=Society::new(&game.navigation,avatar.character);
+    let avatar=Avatar::default();let spec=scene::build(&avatar,&random);let mut game=Game::new(Navigation::new(geometry::navigation_bounds(&spec)),spec.drops_y);game.set_profile(avatar.character as u64+1);game.creator=!capture.skip_creator;let society=Society::new(&game.navigation,avatar.character);
     App::new()
         .insert_resource(Life{game,avatar,society,haunting:Haunting::default(),poltergeist:Poltergeist::default(),changed:false,random})
         .insert_resource(capture).insert_resource(CameraOrbit::default())
