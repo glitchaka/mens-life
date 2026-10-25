@@ -42,8 +42,8 @@ fn distance(a:Vec3,b:Vec3)->f64{(a.x-b.x).hypot(a.z-b.z)}
 fn yaw(from:Vec3,target:Vec3)->f64{(target.x-from.x).atan2(target.z-from.z)}
 fn house_interior(p:Vec3)->bool{(-4.96..=-1.00).contains(&p.x)&&(-3.48..=3.54).contains(&p.z)}
 
-/// Outdoor NPCs use a second path constraint on top of the player's navigation:
-/// the full house footprint is forbidden even though the front door is open to the protagonist.
+/// Outdoor NPCs use a second path constraint on top of the resident navigation:
+/// the full house footprint is forbidden even though the front door is open to the selected resident.
 fn outdoor_route(navigation:&Navigation,from:Vec3,to:Vec3)->Option<VecDeque<Vec3>>{
     let start=navigation.nearest(from)?;let end=navigation.nearest(to)?;
     if house_interior(Navigation::point(end)){return None;}
@@ -66,7 +66,15 @@ fn outdoor_route(navigation:&Navigation,from:Vec3,to:Vec3)->Option<VecDeque<Vec3
 impl Society {
     pub fn new(navigation:&Navigation,selected_profile:usize)->Self{
         let mut residents=Vec::new();let mut runtime_id=2u64;
-        for(profile_index,spec)in CHARACTERS.iter().enumerate(){if profile_index==selected_profile{continue;}let desired=Vec3::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]);let point=navigation.nearest(desired).map(Navigation::point).unwrap_or(desired);let mut avatar=Avatar::default();avatar.name=spec.name.into();avatar.character=profile_index;let psychology=Psychology::new_profile(runtime_id,profile_index as u64+1,0x4d454e530000u64+runtime_id*97+profile_index as u64).expect("MSPA resident profile");residents.push(Resident{id:runtime_id,profile_index,avatar,frame:Frame{position:point,..Frame::default()},reaction:Reaction{remaining:0.0,..Reaction::default()},psychology,relationship:Relationship::default(),action:"Paseando afuera".into(),path:VecDeque::new(),wander_in:1.5+runtime_id as f64*0.7,wait_for:0.0,cooldown:0.0,needs:[85.0,82.0,90.0,75.0,90.0]});runtime_id+=1;}
+        for(profile_index,spec)in CHARACTERS.iter().enumerate(){
+            if !spec.available||profile_index==selected_profile{continue;}
+            let desired=Vec3::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]);
+            let point=navigation.nearest(desired).map(Navigation::point).unwrap_or(desired);
+            let mut avatar=Avatar::default();avatar.name=spec.name.into();avatar.character=profile_index;
+            let psychology=Psychology::new_profile(runtime_id,profile_index as u64+1,0x4d454e530000u64+runtime_id*97+profile_index as u64).expect("MSPA resident profile");
+            residents.push(Resident{id:runtime_id,profile_index,avatar,frame:Frame{position:point,..Frame::default()},reaction:Reaction{remaining:0.0,..Reaction::default()},psychology,relationship:Relationship::default(),action:"Paseando afuera".into(),path:VecDeque::new(),wander_in:1.5+runtime_id as f64*0.7,wait_for:0.0,cooldown:0.0,needs:[85.0,82.0,90.0,75.0,90.0]});
+            runtime_id+=1;
+        }
         let selected=residents.first().map(|r|r.id);Self{residents,selected,status:"Las demás chicas pasean por fuera de la casa".into(),pending:None,conversation:None,time:0.0,decision_in:7.0,wander_sequence:0}
     }
     fn index(&self,id:u64)->Option<usize>{self.residents.iter().position(|r|r.id==id)}
