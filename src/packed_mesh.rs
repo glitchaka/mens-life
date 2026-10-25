@@ -6,7 +6,10 @@ use bevy::{
     prelude::*,
 };
 
-const GIRL: &[&str] = &[include_str!("model_data/girl_small.txt")];
+const GIRL: &[&str] = &[
+    include_str!("model_data/girl_hi_00.txt"),
+    include_str!("model_data/girl_hi_01.txt"),
+];
 
 fn sextet(byte: u8) -> Option<u8> {
     match byte {
@@ -53,6 +56,8 @@ fn unpack(chunks: &[&str]) -> Mesh {
     let bytes = decode(chunks);
     let vertices = u32_at(&bytes, 0) as usize;
     let index_count = u32_at(&bytes, 4) as usize;
+    let expected = 8 + vertices * 10 + index_count * 2;
+    assert!(bytes.len() >= expected, "supplied girl mesh data was truncated");
     let mut positions = Vec::with_capacity(vertices);
     let mut colors = Vec::with_capacity(vertices);
     let mut at = 8usize;
