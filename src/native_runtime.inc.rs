@@ -6,13 +6,24 @@ fn perceive_world(mut life:ResMut<Life>,mut awareness:Local<perception::WorldAwa
 
 fn animate(
     life:Res<Life>, shared:Res<Materials>, mut materials:ResMut<Assets<StandardMaterial>>,
-    mut girls:Query<&mut Transform,With<Girl>>, mut nodes:Query<(&NodeId,&mut Transform,&mut Visibility),Without<Girl>>,
+    mut girls:Query<&mut Transform,With<Girl>>,
+    mut upper:Query<&mut Visibility,With<HouseUpper>>,
+    mut nodes:Query<(&NodeId,&mut Transform,&mut Visibility),(Without<Girl>,Without<HouseUpper>)>,
 ) {
     let f=&life.game.frame;
     for mut transform in &mut girls {
         transform.translation=Vec3::new(f.position.x as f32,f.position.y as f32,f.position.z as f32);
         transform.rotation=Quat::from_euler(EulerRot::XYZ,f.rotation[0] as f32,f.rotation[1] as f32,f.rotation[2] as f32);
     }
+
+    // The roof is part of the supplied model. Hide it only while the character
+    // is physically inside the house; it returns automatically on the patio.
+    let p=life.game.ground_position;
+    let indoors=(-6.8..=4.05).contains(&p.x)&&(-5.15..=4.0).contains(&p.z);
+    for mut visibility in &mut upper {
+        *visibility=if indoors{Visibility::Hidden}else{Visibility::Inherited};
+    }
+
     for (id,mut t,mut v) in &mut nodes {
         match id.0.as_str() {
             "drops"=>*v=if f.drops{Visibility::Inherited}else{Visibility::Hidden},
