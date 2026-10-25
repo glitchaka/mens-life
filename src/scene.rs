@@ -14,8 +14,8 @@ pub struct Avatar {
 impl Default for Avatar {
     fn default() -> Self {
         Self {
-            name: "Alex".into(), body: "adulto".into(), skin: "#b97855".into(),
-            hair: "#37271f".into(), shirt: "#315f79".into(), pants: "#27384b".into(),
+            name: "Chica".into(), body: "asset".into(), skin: "#ffffff".into(),
+            hair: "#ffffff".into(), shirt: "#ffffff".into(), pants: "#ffffff".into(),
         }
     }
 }
@@ -78,7 +78,6 @@ fn append_shower_drops(s:&mut SceneSpec,random:&[f64]) {
 pub fn build(avatar:&Avatar,random:&[f64])->SceneSpec {
     let mut scene=SceneSpec::new(avatar);
     crate::house::append(&mut scene);
-    // Interior objects are allowed additions; they do not replace the supplied house mesh.
     crate::furnishings::append(&mut scene);
     append_shower_drops(&mut scene,random);
     scene
