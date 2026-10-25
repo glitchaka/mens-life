@@ -79,6 +79,7 @@ pub fn build(avatar:&Avatar,random:&[f64])->SceneSpec {
     let mut scene=SceneSpec::new(avatar);
     crate::house::append(&mut scene);
     crate::furnishings::append(&mut scene);
+    crate::haunting::append_visuals(&mut scene);
     append_shower_drops(&mut scene,random);
     scene
 }
