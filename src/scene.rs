@@ -1,10 +1,12 @@
-//! Scene composition. The visible character and architecture come from the supplied assets.
+//! Scene composition. Visible characters and architecture are imported assets;
+//! this module only owns simulation proxies and lightweight effects.
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Avatar {
     pub name: String,
+    pub character: usize,
     pub body: String,
     pub skin: String,
     pub hair: String,
@@ -14,7 +16,7 @@ pub struct Avatar {
 impl Default for Avatar {
     fn default() -> Self {
         Self {
-            name: "Chica".into(), body: "asset".into(), skin: "#ffffff".into(),
+            name: "Aiko".into(), character: 0, body: "asset".into(), skin: "#ffffff".into(),
             hair: "#ffffff".into(), shirt: "#ffffff".into(), pants: "#ffffff".into(),
         }
     }
@@ -36,10 +38,8 @@ impl SceneSpec {
         Self {
             background: 0x9fc8cf,
             fog: [25.0, 44.0],
-            camera: json!({"bounds":[-10,10,7,-7],"near":0.1,"far":100}),
-            lights: vec![],
-            materials: json!({}),
-            objects: vec![], obstacles: vec![], drops_y: vec![],
+            camera: json!({"bounds":[-10,18,8,-9],"near":0.1,"far":100}),
+            lights: vec![], materials: json!({}), objects: vec![], obstacles: vec![], drops_y: vec![],
         }
     }
     #[allow(clippy::too_many_arguments)]
@@ -67,8 +67,8 @@ fn append_shower_drops(s:&mut SceneSpec,random:&[f64]) {
     s.group("drops",[0.0;3],None); s.last()["visible"]=json!(false);
     for i in 0..30_usize {
         let sample=|j:usize|random.get(i*3+j).copied().unwrap_or(0.5);
-        let y=sample(1)*2.15; s.drops_y.push(y);
-        s.mesh("sphere",&[0.025,6.0,4.0],[-6.14+sample(0)*0.48,y,-4.35+sample(2)*0.62],0x98d6f6,1.0,"",[false,false]);
+        let y=sample(1)*1.85+0.45; s.drops_y.push(y);
+        s.mesh("sphere",&[0.025,6.0,4.0],[-4.10+sample(0)*0.48,y,-2.55+sample(2)*0.62],0x98d6f6,1.0,"",[false,false]);
         s.last()["id"]=json!(format!("drop-{i}")); s.last()["parent"]=json!("drops");
         s.last()["scale"]=json!([1,4,1]);
         s.last()["material"]=json!({"type":"basic","color":0x98d6f6,"transparent":true,"opacity":0.65});
@@ -83,5 +83,4 @@ pub fn build(avatar:&Avatar,random:&[f64])->SceneSpec {
     scene
 }
 
-/// No procedural residents: the only visible person is the supplied girl model.
 pub fn residents()->Vec<(u64,Avatar,[f64;3])> { Vec::new() }
