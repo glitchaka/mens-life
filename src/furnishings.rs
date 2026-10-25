@@ -24,11 +24,12 @@ pub(crate) fn append(s: &mut SceneSpec) {
     // Dining: classic table ~0.73 x 1.18 m, height ~0.68 m; four real chair copies.
     proxy(s, [0.74, 0.69, 1.19], [-2.20, 0.345, -1.12], "sink", true);
     for (x, z) in [(-2.90,-1.12),(-1.50,-1.12),(-2.20,-1.88),(-2.20,-0.38)] {
-        proxy(s, [0.35, 0.75, 0.40], [x, 0.375, z], "", true);
+        proxy(s, [0.46, 0.98, 0.52], [x, 0.49, z], "", true);
     }
 
-    // Bathroom set scaled to ~1.80 m footprint and ~1.74 m height.
-    proxy(s, [1.80, 1.74, 1.80], [-4.02, 0.87, -2.27], "", true);
+    // Bathroom set stays visually intact. Do not treat the whole 1.8 m set as one
+    // solid obstacle: its shower/toilet live inside that footprint and must remain reachable.
+    proxy(s, [1.80, 1.74, 1.80], [-4.02, 0.87, -2.27], "", false);
     proxy(s, [0.50, 1.00, 0.54], [-4.18, 0.50, -2.58], "shower", false);
     proxy(s, [0.46, 0.68, 0.46], [-3.56, 0.34, -2.32], "toilet", false);
 }
