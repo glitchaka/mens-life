@@ -19,7 +19,6 @@ fn setup(
         ("furniture/bed.glb",[-4.03,0.0,2.08],0.80,0.0,"BedAsset"),
         ("furniture/sofa.glb",[-3.67,0.0,0.35],0.72,0.0,"SofaAsset"),
         ("furniture/small_table.glb",[-2.55,0.0,0.38],0.72,0.0,"SmallTableAsset"),
-        // This model's origin is at its top: +0.654 puts its measured bottom on the floor.
         ("furniture/classic_table.glb",[-2.20,0.654,-1.12],0.75,0.0,"DiningTableAsset"),
         ("furniture/bathroom.glb",[-4.02,0.0,-2.27],0.72,0.0,"BathroomAsset"),
     ]{
@@ -44,7 +43,7 @@ fn setup(
         ));
     }
 
-    // SceneSpec contributes only invisible interaction/collision proxies and effects.
+    // SceneSpec contributes only invisible interaction/collision proxies and lightweight effects.
     let spec=scene::build(&life.avatar,&life.random);
     for(id,value)in spec.materials.as_object().unwrap(){shared.0.insert(id.clone(),materials.add(material(value)));}
     let mut entities=HashMap::<String,Entity>::new();
@@ -68,7 +67,14 @@ fn setup(
     let orbit=CameraOrbit::default();let focus=Vec3::new(-2.5,0.7,0.0);let camera_pos=focus+Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
     commands.spawn((CameraRig,Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:15.5,min_height:10.5},..OrthographicProjection::default_3d()}),Transform::from_translation(camera_pos).looking_at(focus,Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:28.0,end:52.0},..default()}));
 
-    if let Some(task)=capture.task{life.game.command(task);}for i in 0..capture.simulate{life.game.tick(0.05,i as f64*50.0);let Life{game,society,..}=&mut *life;society.tick(game,0.05);}
+    if let Some(task)=capture.task{life.game.command(task);}
+    for i in 0..capture.simulate{
+        life.game.tick(0.05,i as f64*50.0);
+        let profile=life.avatar.character;
+        let Life{game,society,haunting,..}=&mut *life;
+        society.tick(game,0.05);
+        haunting.tick(game,society,profile,0.05);
+    }
 }
 
 fn interface(mut contexts:EguiContexts,mut life:ResMut<Life>,camera:Single<(&Camera,&GlobalTransform),With<CameraRig>>)->Result{
@@ -79,10 +85,11 @@ fn interface(mut contexts:EguiContexts,mut life:ResMut<Life>,camera:Single<(&Cam
         if result.start{life.game.creator=false;}
         return Ok(());
     }
-    let Life{game,avatar,society,..}=&mut *life;
+    let Life{game,avatar,society,haunting,..}=&mut *life;
     let _=ui::draw(ctx,game,avatar);
     if !society.residents.is_empty(){ui::draw_social(ctx,game,society);}
     mspa_ui::draw(ctx,game,society,&avatar.name);
+    haunting_ui::draw(ctx,haunting);
     let frame=&game.frame;let rotation=Quat::from_euler(EulerRot::XYZ,frame.rotation[0]as f32,frame.rotation[1]as f32,frame.rotation[2]as f32);let head=Vec3::new(frame.position.x as f32,frame.position.y as f32,frame.position.z as f32)+rotation*Vec3::new(0.0,1.5,0.0);let(camera,transform)=*camera;
     if let Ok(position)=camera.world_to_viewport(transform,head){let size=camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);let screen=ctx.content_rect();ui::draw_reaction(ctx,game,[screen.left()+position.x*screen.width()/size.x,screen.top()+position.y*screen.height()/size.y]);}
     Ok(())
