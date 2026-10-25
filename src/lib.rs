@@ -9,6 +9,7 @@ pub mod house;
 pub mod mspa_ui;
 pub mod perception;
 pub mod poltergeist;
+pub mod poltergeist_ui;
 pub mod psychology;
 pub mod scene;
 pub mod society;
