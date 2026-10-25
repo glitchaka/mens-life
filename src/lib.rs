@@ -3,6 +3,8 @@ pub mod character_ui;
 pub mod furnishings;
 pub mod game;
 pub mod geometry;
+pub mod haunting;
+pub mod haunting_ui;
 pub mod house;
 pub mod mspa_ui;
 pub mod perception;
