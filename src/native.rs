@@ -30,6 +30,7 @@ struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, 
 #[derive(Component)] struct Person(u64);
 #[derive(Component)] struct CharacterRoot { profile_index: usize }
 #[derive(Component)] struct CameraRig;
+#[derive(Component)] struct HauntLight;
 #[derive(Clone, Copy, Component, PartialEq, Eq)] enum CutawaySide { Roof, East, West, North, South }
 #[derive(Component)] struct CutawayPart(CutawaySide);
 #[derive(Component)] struct CharacterAnimation { profile_index: usize, idle: Option<AnimationNodeIndex>, walk: Option<AnimationNodeIndex>, walking: bool }
