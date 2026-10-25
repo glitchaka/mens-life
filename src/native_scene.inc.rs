@@ -6,11 +6,19 @@ fn setup(
     mut life: ResMut<Life>,
     capture: Res<Capture>,
 ) {
-    // Visible architecture: the cutaway/lower shell baked directly from the supplied FBX.
-    // This includes the exterior ground/patio; nothing procedural replaces the house.
+    // Visible architecture is baked directly from the supplied FBX. The lower
+    // property contains the house, veranda, patio/yard and vegetation.
     let house_material=materials.add(StandardMaterial{base_color:Color::WHITE,perceptual_roughness:0.9,..default()});
     commands.spawn((
         Mesh3d(meshes.add(house_asset::lower().mesh())),
+        MeshMaterial3d(house_material.clone()),
+        Transform::IDENTITY,
+    ));
+    // The original roof is a separate render node so entering the house can
+    // reveal the interior without deleting it from the supplied model.
+    commands.spawn((
+        HouseUpper,
+        Mesh3d(meshes.add(house_asset::upper().mesh())),
         MeshMaterial3d(house_material),
         Transform::IDENTITY,
     ));
@@ -49,9 +57,9 @@ fn setup(
         CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:55.0,..default()}.build(),
         Transform::from_xyz(-8.0,18.0,11.0).looking_at(Vec3::new(-1.0,0.0,-0.5),Vec3::Y)));
     commands.spawn((PointLight{color:rgb(0xffd89b),intensity:18.0*std::f32::consts::TAU*2.0,range:9.0,..default()},Transform::from_xyz(0.2,2.7,0.1)));
-    commands.spawn((Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:20.0,min_height:14.0},..OrthographicProjection::default_3d()}),
-        Transform::from_xyz(16.0,18.0,19.0).looking_at(Vec3::new(-1.0,0.0,-0.5),Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,
-        DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:30.0,end:55.0},..default()}));
+    commands.spawn((Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:28.0,min_height:18.0},..OrthographicProjection::default_3d()}),
+        Transform::from_xyz(20.0,22.0,24.0).looking_at(Vec3::new(2.5,0.0,-0.5),Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,
+        DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:36.0,end:65.0},..default()}));
 
     if let Some(task)=capture.task { life.game.command(task); }
     for i in 0..capture.simulate { life.game.tick(0.05,i as f64*50.0); let Life{game,society,..}=&mut *life; society.tick(game,0.05); }
