@@ -1,5 +1,6 @@
 use bevy::{
     animation::{AnimationPlayer, graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex}},
+    asset::AssetPlugin,
     camera::{Exposure, ScalingMode},
     core_pipeline::tonemapping::Tonemapping,
     gltf::{Gltf, GltfAssetLabel},
@@ -22,7 +23,7 @@ use mens_life::{
     scene::{self, Avatar}, society::Society, ui,
 };
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Resource)]
 struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, poltergeist: Poltergeist, changed: bool, random: Vec<f64> }
@@ -43,17 +44,33 @@ fn color(v:&Value)->Color { let n=v.as_u64().map(|n|n as u32).or_else(||v.as_str
 fn rgb(n:u32)->Color { Color::srgb_u8((n>>16)as u8,(n>>8)as u8,n as u8) }
 fn material(v:&Value)->StandardMaterial { let c=color(&v["color"]);let alpha=v["opacity"].as_f64().unwrap_or(1.0)as f32;StandardMaterial{base_color:c.with_alpha(alpha),perceptual_roughness:v["roughness"].as_f64().unwrap_or(1.0)as f32,emissive:if v["emissive"].is_null(){LinearRgba::BLACK}else{color(&v["emissive"]).to_linear()},alpha_mode:if v["transparent"].as_bool().unwrap_or(false){AlphaMode::Blend}else{AlphaMode::Opaque},unlit:v["type"]=="basic",..default()} }
 
+fn asset_root()->String {
+    let mut candidates=Vec::<PathBuf>::new();
+    if let Ok(cwd)=std::env::current_dir(){candidates.push(cwd.join("assets"));}
+    if let Ok(exe)=std::env::current_exe(){
+        if let Some(dir)=exe.parent(){
+            candidates.push(dir.join("assets"));
+            if let Some(repo)=dir.parent().and_then(|p|p.parent()){candidates.push(repo.join("assets"));}
+        }
+    }
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets"));
+    candidates.into_iter().find(|p|p.is_dir()).unwrap_or_else(||PathBuf::from("assets")).to_string_lossy().into_owned()
+}
+
 pub fn run(){
     let mut capture=Capture::default();let mut args=std::env::args().skip(1);
     while let Some(arg)=args.next(){match arg.as_str(){"--capture"=>capture.path=args.next(),"--start"=>capture.skip_creator=true,"--task"=>capture.task=args.next().and_then(|s|Task::parse(&s)),"--simulate"=>capture.simulate=args.next().and_then(|s|s.parse().ok()).unwrap_or(0),"--help"=>{println!("Vida Isométrica 3D\n  cargo run --release\n  --capture archivo.png [--start] [--task bed|tv|shower|toilet|eat] [--simulate frames]");return;},_=>{eprintln!("Argumento desconocido: {arg}");std::process::exit(2);}}}
     let mut seed=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()as u64;
     let random=(0..90).map(|_|{seed=seed.wrapping_mul(6364136223846793005).wrapping_add(1);(seed>>11)as f64/(1u64<<53)as f64}).collect::<Vec<_>>();
     let avatar=Avatar::default();let spec=scene::build(&avatar,&random);let mut game=Game::new(Navigation::new(geometry::navigation_bounds(&spec)),spec.drops_y);game.set_profile(avatar.character as u64+1);game.creator=!capture.skip_creator;let society=Society::new(&game.navigation,avatar.character);
+    let assets=asset_root();
     App::new()
         .insert_resource(Life{game,avatar,society,haunting:Haunting::default(),poltergeist:Poltergeist::default(),changed:false,random})
         .insert_resource(capture).insert_resource(CameraOrbit::default())
         .insert_resource(ClearColor(rgb(0x9ec7d0))).insert_resource(AmbientLight{color:rgb(0xfff6df),brightness:1.6,..default()}).insert_resource(DirectionalLightShadowMap{size:2048}).init_resource::<Materials>()
-        .add_plugins(DefaultPlugins.set(WindowPlugin{primary_window:Some(Window{title:"Vida Isométrica 3D".into(),resolution:WindowResolution::new(1280,800),..default()}),..default()}))
+        .add_plugins(DefaultPlugins
+            .set(AssetPlugin{file_path:assets,..default()})
+            .set(WindowPlugin{primary_window:Some(Window{title:"Vida Isométrica 3D".into(),resolution:WindowResolution::new(1280,800),..default()}),..default()}))
         .add_plugins(EguiPlugin::default())
         .add_systems(Startup,setup)
         .add_systems(PreUpdate,configure_interface.after(EguiPreUpdateSet::InitContexts).before(EguiPreUpdateSet::BeginPass))
