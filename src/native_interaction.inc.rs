@@ -15,8 +15,8 @@ fn pick(
     if contexts.ctx_mut().is_ok_and(|ctx|ctx.is_pointer_over_area()){return;}
     let Some(cursor)=window.cursor_position()else{return;};let Ok(ray)=camera.0.viewport_to_world(camera.1,cursor)else{return;};
 
-    // Character roots are selected with a small world-space capsule proxy, so a complex
-    // imported GLB never needs to be rewritten merely to become clickable.
+    // Character roots are selected with a small world-space proxy, so complex imported
+    // GLBs stay untouched merely to become clickable.
     let mut character_hit=None;let mut character_t=f32::INFINITY;
     for(root,transform)in &characters{
         if root.profile_index==life.avatar.character{continue;}
@@ -33,7 +33,9 @@ fn pick(
     }
     if let Some(task)=hit{life.game.command(task);return;}
 
-    if ray.direction.y.abs()>1e-6{let t=(-0.045-ray.origin.y)/ray.direction.y;let p=ray.origin+*ray.direction*t;if t>0.0&&(game::MIN_X..=game::MAX_X).contains(&(p.x as f64))&&(game::MIN_Z..=game::MAX_Z).contains(&(p.z as f64)){life.game.walk_to(Point::new(p.x as f64,0.0,p.z as f64));}}
+    // Click-to-walk stops at the actual supplied property footprint instead of the old
+    // oversized simulation rectangle.
+    if ray.direction.y.abs()>1e-6{let t=(-0.045-ray.origin.y)/ray.direction.y;let p=ray.origin+*ray.direction*t;if t>0.0&&(-6.08..=6.08).contains(&(p.x as f64))&&(-6.08..=6.08).contains(&(p.z as f64)){life.game.walk_to(Point::new(p.x as f64,0.0,p.z as f64));}}
 }
 
 fn capture_frame(mut commands:Commands,mut capture:ResMut<Capture>){if capture.path.is_none()||capture.requested{return;}capture.frame+=1;if capture.frame>=90{capture.requested=true;let path=capture.path.clone().unwrap();commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path)).observe(|_:On<ScreenshotCaptured>,mut exit:MessageWriter<AppExit>|{exit.write(AppExit::Success);});}}
