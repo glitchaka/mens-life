@@ -46,7 +46,9 @@ pub struct Haunting {
     pub essence: f64,
     pub last_event: String,
     pub event_remaining: f64,
+    pub selected_power: u8,
     event_in: f64,
+    manifest_for: f64,
     serial: u64,
 }
 
@@ -57,7 +59,9 @@ impl Default for Haunting {
             essence: 0.0,
             last_event: "La casa parece completamente normal.".into(),
             event_remaining: 0.0,
+            selected_power: 0,
             event_in: 8.0,
+            manifest_for: 0.0,
             serial: 0,
         }
     }
@@ -68,6 +72,10 @@ impl Haunting {
         self.level.checked_sub(1).and_then(|index| TIERS.get(index as usize))
     }
 
+    pub fn selected(&self) -> Option<&'static HauntTier> {
+        self.selected_power.checked_sub(1).and_then(|index| TIERS.get(index as usize))
+    }
+
     pub fn next(&self) -> Option<&'static HauntTier> {
         TIERS.get(self.level as usize)
     }
@@ -76,13 +84,24 @@ impl Haunting {
         self.next().map_or(1.0, |tier| (self.essence / tier.cost).clamp(0.0, 1.0) as f32)
     }
 
+    pub fn select_previous(&mut self) {
+        if self.level == 0 { return; }
+        self.selected_power = if self.selected_power <= 1 { self.level } else { self.selected_power - 1 };
+    }
+
+    pub fn select_next(&mut self) {
+        if self.level == 0 { return; }
+        self.selected_power = if self.selected_power >= self.level { 1 } else { self.selected_power + 1 };
+    }
+
     pub fn tick(&mut self, game: &mut Game, society: &mut Society, selected_profile: usize, dt: f64) {
         if game.creator || game.paused { return; }
         let dt = if dt.is_finite() { dt.clamp(0.0, 0.05) } else { 0.0 };
         self.event_remaining = (self.event_remaining - dt).max(0.0);
+        self.manifest_for = (self.manifest_for - dt).max(0.0);
 
-        // Passive idle income. Household activity and conversations increase the rate,
-        // so the system progresses even if the player simply watches the simulation.
+        // Passive idle income. Activity and conversation accelerate the next unlock,
+        // but progression continues when the user simply watches the house.
         let activity = if game.phase == Phase::Using { 0.42 } else if game.phase == Phase::Walking { 0.12 } else { 0.0 };
         let social = if game.talking { 0.15 } else { 0.0 };
         let rate = 0.72 + self.level as f64 * 0.055 + activity + social;
@@ -92,6 +111,7 @@ impl Haunting {
             if self.essence < next.cost { break; }
             self.essence -= next.cost;
             self.level = next.level;
+            self.selected_power = self.level;
             self.last_event = format!("Desbloqueado: {} — {}", next.name, next.description);
             self.event_remaining = 8.0;
             self.event_in = 1.2;
@@ -100,42 +120,58 @@ impl Haunting {
         if self.level == 0 { return; }
         self.event_in -= dt;
         if self.event_in > 0.0 { return; }
-        self.trigger(game, society, selected_profile);
+        self.trigger_ambient(game, society, selected_profile);
         let base = (17.0 - self.level as f64 * 0.48).max(5.2);
         self.event_in = base + (self.serial % 5) as f64 * 0.85;
     }
 
-    fn trigger(&mut self, game: &mut Game, society: &mut Society, selected_profile: usize) {
+    /// Uses one of the powers already unlocked by idle progression. This is an
+    /// environmental manifestation: characters perceive the event, never a player identity.
+    pub fn invoke(&mut self, power: u8, game: &mut Game, society: &mut Society, selected_profile: usize) -> bool {
+        if power == 0 || power > self.level { return false; }
         self.serial = self.serial.wrapping_add(1);
-        let tier = self.current().expect("haunting tier");
-        self.last_event = event_text(self.level, self.serial).into();
+        self.selected_power = power;
+        self.last_event = event_text(power, self.serial).into();
+        self.event_remaining = if power >= 17 { 9.0 } else { 6.5 };
+        if power >= 17 {
+            self.manifest_for = if power >= 20 { 22.0 } else if power >= 19 { 14.0 } else { 9.0 };
+        }
+        self.react_all(power, game, society, selected_profile);
+        true
+    }
+
+    fn trigger_ambient(&mut self, game: &mut Game, society: &mut Society, selected_profile: usize) {
+        self.serial = self.serial.wrapping_add(1);
+        let power = 1 + (self.serial % self.level as u64) as u8;
+        self.last_event = event_text(power, self.serial).into();
         self.event_remaining = 7.0;
+        if power >= 17 { self.manifest_for = self.manifest_for.max(4.5); }
+        self.react_all(power, game, society, selected_profile);
+    }
 
-        let (expression, line) = reaction(selected_profile, &game.psychology, self.level, &self.last_event);
+    fn react_all(&mut self, power: u8, game: &mut Game, society: &mut Society, selected_profile: usize) {
+        let (expression, line) = reaction(selected_profile, &game.psychology, power, &self.last_event);
         game.reaction = Reaction { expression, words: line, remaining: 6.5 };
-
         for resident in &mut society.residents {
-            let (expression, line) = reaction(resident.profile_index, &resident.psychology, self.level, &self.last_event);
+            let (expression, line) = reaction(resident.profile_index, &resident.psychology, power, &self.last_event);
             resident.reaction = Reaction { expression, words: line, remaining: 6.5 };
-            resident.action = if self.level < 8 { "Atenta a un ruido extraño" } else if self.level < 17 { "Buscando qué acaba de ver" } else { "Mirando una aparición" }.into();
+            resident.action = if power < 8 { "Atenta a un ruido extraño" } else if power < 17 { "Buscando qué acaba de ver" } else { "Mirando una aparición" }.into();
         }
-
-        if self.level >= 17 {
-            society.status = format!("Actividad espectral: {}", tier.name);
-        }
+        if power >= 17 { society.status = "Actividad espectral visible en la propiedad".into(); }
     }
 
     pub fn specter_visible(&self, index: usize, time: f64) -> bool {
         if self.level < 17 { return false; }
         let count = ((self.level - 16) as usize).min(3);
         if index >= count { return false; }
-        if self.level >= 20 { return true; }
+        if self.manifest_for > 0.0 { return true; }
+        if self.level >= 20 { return (time * 0.33 + index as f64).sin() > -0.35; }
         let phase = time * (1.25 + index as f64 * 0.31) + index as f64 * 1.7;
-        phase.sin() > if self.level == 17 { 0.55 } else { -0.15 }
+        phase.sin() > if self.level == 17 { 0.82 } else { 0.25 }
     }
 
     pub fn specter_position(&self, index: usize, time: f64) -> [f32; 3] {
-        let anchors = [[-1.9, 0.0, 1.5], [2.9, 0.0, -1.9], [4.7, 0.0, 3.7]];
+        let anchors = [[-2.1, 0.0, 1.5], [2.9, 0.0, -1.9], [4.7, 0.0, 3.7]];
         let a = anchors[index.min(anchors.len() - 1)];
         let drift = (time * (0.31 + index as f64 * 0.07) + index as f64).sin() as f32;
         [a[0] + drift * 0.32, a[1] + (time * 1.7 + index as f64).sin() as f32 * 0.035, a[2] + drift * 0.18]
@@ -226,17 +262,15 @@ pub fn append_visuals(scene: &mut SceneSpec) {
         "type":"standard","color":0xb8e7df,"roughness":0.18,
         "transparent":true,"opacity":0.28,"emissive":0x6ba99f
     });
-    let anchors = [[-1.9, 0.0, 1.5], [2.9, 0.0, -1.9], [4.7, 0.0, 3.7]];
+    let anchors = [[-2.1, 0.0, 1.5], [2.9, 0.0, -1.9], [4.7, 0.0, 3.7]];
     for (index, anchor) in anchors.into_iter().enumerate() {
         let root = format!("specter-root-{index}");
         scene.group(&root, anchor, None);
         scene.last()["visible"] = json!(false);
-
         scene.mesh("capsule", &[0.23, 0.92, 6.0, 12.0], [0.0, 0.88, 0.0], 0xb8e7df, 0.18, "", [false, false]);
         scene.last()["id"] = json!(format!("specter-body-{index}"));
         scene.last()["parent"] = json!(root.clone());
         scene.last()["material_ref"] = json!("specter");
-
         scene.mesh("sphere", &[0.29, 12.0, 8.0], [0.0, 1.62, 0.0], 0xc9f1ea, 0.16, "", [false, false]);
         scene.last()["id"] = json!(format!("specter-head-{index}"));
         scene.last()["parent"] = json!(root);
