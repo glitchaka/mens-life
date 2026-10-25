@@ -1,6 +1,5 @@
-//! Collision/navigation integration for the house supplied by the user.
-//! The visible geometry is the baked FBX; this module owns only invisible
-//! collision volumes and deliberately leaves the front patio entrance open.
+//! Invisible navigation/collision proxies for the original Autumn House asset.
+//! The visible architecture is never reconstructed here.
 use crate::scene::SceneSpec;
 use serde_json::json;
 
@@ -11,13 +10,13 @@ fn wall(s: &mut SceneSpec, size: [f64; 3], at: [f64; 3]) {
 }
 
 pub(crate) fn append(s: &mut SceneSpec) {
-    // Bounds follow the supplied FBX rather than the old procedural room.
-    wall(s, [0.16, 2.8, 9.45], [-6.92, 1.35, -0.45]);
-    wall(s, [0.16, 2.8, 9.45], [4.02, 1.35, -0.45]);
-    wall(s, [10.95, 2.8, 0.16], [-1.45, 1.35, -5.18]);
+    // House_base in the supplied model spans approximately x -4.79..-1.16,
+    // z -3.30..3.37. The real front door sits on the east wall around z 0.49.
+    wall(s, [0.14, 2.8, 6.72], [-4.82, 1.45, 0.04]);
+    wall(s, [3.72, 2.8, 0.14], [-2.98, 1.45, -3.34]);
+    wall(s, [3.72, 2.8, 0.14], [-2.98, 1.45, 3.41]);
 
-    // Camera/front side is split around the real access route. The wide gap
-    // connects the interior navigation mesh to the patio instead of sealing it.
-    wall(s, [3.25, 2.8, 0.16], [-5.28, 1.35, 4.02]);
-    wall(s, [3.25, 2.8, 0.16], [2.39, 1.35, 4.02]);
+    // East wall split around the actual door: interior and patio remain connected.
+    wall(s, [0.14, 2.8, 3.10], [-1.13, 1.45, -1.70]);
+    wall(s, [0.14, 2.8, 2.12], [-1.13, 1.45, 2.31]);
 }
