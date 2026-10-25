@@ -13,9 +13,10 @@ fn advance(time:Res<Time>,mut life:ResMut<Life>,capture:Res<Capture>,keys:Res<Bu
         let dt=time.delta_secs_f64();
         life.game.tick(dt,time.elapsed_secs_f64()*1000.0);
         let profile=life.avatar.character;
-        let Life{game,society,haunting,..}=&mut *life;
+        let Life{game,society,haunting,poltergeist,..}=&mut *life;
         society.tick(game,dt);
         haunting.tick(game,society,profile,dt);
+        poltergeist.tick(dt);
     }
 }
 fn perceive_world(mut life:ResMut<Life>,mut awareness:Local<perception::WorldAwareness>){let Life{game,society,..}=&mut *life;perception::observe(game,society,&mut awareness);}
@@ -106,7 +107,7 @@ fn animate(
     }
     for(id,mut t,mut v)in &mut nodes{
         match id.0.as_str(){
-            "drops"=>*v=if life.game.frame.drops{Visibility::Inherited}else{Visibility::Hidden},
+            "drops"=>*v=if life.game.frame.drops||life.poltergeist.active(Task::Shower){Visibility::Inherited}else{Visibility::Hidden},
             s if s.starts_with("drop-")=>{let i=s[5..].parse::<usize>().unwrap();t.translation.y=life.game.drops_y[i]as f32;},
             s if s.starts_with("specter-root-")=>{
                 let index=s[13..].parse::<usize>().unwrap_or(0);
@@ -125,5 +126,6 @@ fn animate(
         light.intensity=18.0*std::f32::consts::TAU*2.0*factor;
         light.color=if haunting_light&&life.haunting.level>=11{rgb(0xc9e8ee)}else{rgb(0xffd89b)};
     }
-    if let Some(mat)=shared.0.get("tv-screen").and_then(|h|materials.get_mut(h)){mat.base_color=rgb(if life.game.frame.watching{0x79a7d3}else{0x17212b});mat.emissive=Color::hsl(life.game.frame.screen_hue as f32*360.0,0.4,if life.game.frame.watching{0.4}else{0.03}).to_linear();}
+    let tv_active=life.game.frame.watching||life.poltergeist.active(Task::Tv);
+    if let Some(mat)=shared.0.get("tv-screen").and_then(|h|materials.get_mut(h)){mat.base_color=rgb(if tv_active{0x79a7d3}else{0x17212b});mat.emissive=Color::hsl(life.game.frame.screen_hue as f32*360.0,0.4,if tv_active{0.4}else{0.03}).to_linear();}
 }
