@@ -1,14 +1,12 @@
-# Vida Isométrica 3D — Rust nativo para Windows
+# Vida Isométrica 3D
 
-Juego de escritorio en Rust. Bevy dibuja las mallas 3D, materiales, sombras,
-cámara y animaciones. egui dibuja los controles dentro de la misma ventana.
-La casa, el personaje y las fuentes se incluyen en el ejecutable.
+Simulación de vida isométrica en Rust con Bevy, egui y MSPA-Lib. La arquitectura visual usa modelos GLB importados; la simulación, navegación, psicología e interacción ambiental permanecen separadas del contenido gráfico.
 
-## Compilar
+## Preparación
 
-Instala [Rust con rustup](https://rustup.rs/) y los Build Tools de Visual Studio
-con **Desarrollo para el escritorio con C++** y Windows SDK, necesarios para
-compilar MSPA-Lib y para el enlazador de la toolchain MSVC.
+Instala Rust mediante rustup y los Build Tools de Visual Studio con Desarrollo para el escritorio con C++ y Windows SDK. MSPA-Lib se compila estáticamente con el proyecto.
+
+Los modelos binarios se cargan directamente desde `assets/`. Consulta `ASSETS.md` para la estructura exacta. Los GLB conservan malla, UV, rig y animaciones; sólo se reducen texturas grandes cuando es necesario para memoria de ejecución.
 
 ```powershell
 git pull origin main
@@ -16,103 +14,127 @@ cargo build --release
 .\target\release\mens-life.exe
 ```
 
-**`cargo build --release` genera `target/release/mens-life.exe`.**
-El ejecutable es el destino predeterminado de Cargo. No requiere opciones de
-features ni pasos de npm, Node, WebAssembly o generación de una web.
-La primera compilación descarga y compila las dependencias del motor.
-`rust-toolchain.toml` fija Rust 1.90.0 con perfil mínimo y `Cargo.lock` fija las
-versiones de las dependencias.
+## Casa y cámara
 
-Para compilar y abrir el juego directamente:
+La escena usa la casa Autumn House suministrada, con vivienda, veranda, patio, terreno exterior, vegetación y elementos de la propiedad. No se reconstruye con primitivas procedurales.
 
-```powershell
-cargo run --release
-```
+La cámara es ortográfica y puede rotarse con:
 
-El ejecutable distribuido está preparado para Windows 10/11 de 64 bits.
-Necesita una GPU con controladores compatibles con DirectX 12 o Vulkan.
+- Q / Flecha izquierda: girar a la izquierda.
+- E / Flecha derecha: girar a la derecha.
+- Botón derecho del ratón + arrastre horizontal: rotación continua.
 
-## Jugar
+Cuando la residente seleccionada está dentro, el techo y el muro situado entre la cámara y el interior se ocultan según el ángulo actual. Los grupos `CUTAWAY_ROOF`, `CUTAWAY_EAST`, `CUTAWAY_WEST`, `CUTAWAY_NORTH` y `CUTAWAY_SOUTH` pertenecen al modelo importado; no sustituyen su geometría.
 
-Elige nombre, complexión y colores y pulsa **ENTRAR A LA CASA**. El personaje
-atiende sus necesidades automáticamente. Pulsa el suelo para caminar, un
-mueble para usarlo o Comer, Televisión, Dormir, Ducha y Baño para indicarle
-una actividad. El lavabo activa Comer, igual que en la referencia.
+La entrada conecta la navegación interior con veranda, patio y exterior. Las colisiones invisibles siguen las dimensiones reales del GLB y dejan abierta la puerta real.
 
-El botón de pausa y la barra espaciadora pausan o reanudan la simulación.
-El botón del personaje y Escape abren o cierran el creador.
+## Personajes
 
-## Personajes e interacción
+El selector muestra únicamente los cinco GLB de personaje disponibles:
 
-El protagonista, Mara y Nicolás usan un modelo humano de aproximadamente
-1,89 unidades: cabeza proporcionada, mandíbula, nariz, orejas, manos con
-dedos, ropa y un esqueleto con caderas, rodillas, hombros y codos.
-La marcha articula las piernas y brazos; el reposo incluye respiración y
-parpadeo. El modelo es procedural y se incluye en el ejecutable.
+- Mia
+- Kurumi
+- Mai
+- Rin
+- Yui
 
-El panel **EN CASA** permite saludar, hablar o bromear con Mara y Nicolás.
-También se puede pulsar su cuerpo para seleccionarlos. El protagonista se
-acerca por un camino libre, los dos se miran, gesticulan y alternan frases.
-Los residentes caminan por la casa y pueden iniciar encuentros cercanos
-entre ellos o con el protagonista. Las conversaciones completadas mejoran
-el afecto, la confianza y la familiaridad en ambas direcciones, usando los
-estados y reportes reales de MSPA. Las órdenes de movimiento o de muebles
-interrumpen el encuentro. La pausa y el creador detienen a todos.
+La referencia de la chica de camiseta rosada queda reservada, pero no se sustituye por otro modelo: todavía no se dispone de su archivo 3D correspondiente.
 
-La posición navegable se conserva separada de la pose animada. La cama tiene
-el personaje boca arriba, con la cabeza sobre la almohada; la postura de
-sentado flexiona rodillas y caderas. Al terminar se anima la salida hasta el
-punto libre de entrada. Una orden durante el uso parte de ese mismo punto,
-evitando intentar caminar desde el interior del váter, la ducha o la cama.
-El acceso del baño es más ancho y los obstáculos salen de las mallas reales.
+Los cinco modelos se normalizan mediante transformaciones de escena para quedar aproximadamente entre 1,65 y 1,67 m de altura. No se deciman sus mallas.
 
-## Psicología del personaje
+Kurumi y Mai conservan clips de reposo y marcha. Los modelos que incluyen otros clips conservan su rig y animaciones originales. Cuando un GLB no trae una marcha utilizable se aplica sólo un movimiento raíz mínimo como fallback; no se reconstruye el cuerpo.
 
-[MSPA-Lib](https://github.com/glitchaka/MSPA-Lib) está integrada y enlazada
-estáticamente en el ejecutable. Su núcleo C++17 se compila automáticamente
-con Cargo; no requiere una DLL externa, CMake ni inicializar submódulos.
+La chica elegida vive dentro de la casa. Las demás existen simultáneamente como residentes y pasean por el exterior sin atravesar el interior.
 
-El juego comunica las necesidades percibidas mediante `OBSERVE`, ofrece
-únicamente actividades a las que se puede llegar y usa `DECIDE` para la
-autonomía. MSPA considera necesidades, valores, metas, personalidad,
-experiencias aprendidas y continuidad de la actividad. También puede elegir
-descansar si las necesidades están cubiertas. Las órdenes del jugador se
-respetan hasta terminar o hasta recibir otra indicación.
+## MSPA por personaje
 
-Los resultados físicos de comer, dormir, ducharse, entretenerse o ir al baño
-se comunican con `REPORT`. Los caminos bloqueados producen un fallo; una
-interrupción del jugador se observa sin inventar un fracaso. Las emociones y
-el ánimo avanzan con el tiempo de simulación y se congelan durante la pausa
-y el creador. Cambiar el nombre o la apariencia conserva la psicología.
+Cada chica posee su propio perfil MSPA. El perfil visual y la identidad psicológica están separados para evitar mezclar estados o rasgos al cambiar de personaje.
 
-Una burbuja sobre la cabeza muestra una carita y frases breves: «Me ruge el
-estómago», «Zzz...», «¡Qué alivio!» o reacciones al ánimo del personaje.
-El panel sobre las necesidades muestra el emoticono y el estado actual;
-al posar el cursor muestra recuerdos, creencias y experiencias aprendidas.
-Las caritas se dibujan con vectores para que funcionen sin fuentes emoji
-instaladas. Las frases en español pertenecen a la presentación del juego:
-no se atribuyen a un generador de lenguaje dentro de MSPA.
+El panel `MSPA · rasgos por personaje` permite inspeccionar cualquier residente y muestra directamente desde MSPA:
 
-La psicología se conserva durante la sesión; todavía no hay guardado de
-partidas entre ejecuciones. La revisión de MSPA incluida es
-`4532daf43a4ffa0a2b7abb8cace29ba53a9b8d89`.
+- sociabilidad, estabilidad, empatía, persistencia, curiosidad y audacia;
+- rigidez de creencias, persistencia de metas, resistencia al cambio, sensibilidad a amenaza, sensibilidad social y exploración;
+- emociones, valencia, activación y confianza;
+- recuerdos, creencias y patrones aprendidos.
 
-## Código
+Las personalidades son diferentes. Kurumi tiene un perfil más mordaz, impulsivo y confrontacional; Yui es más dulce, empática y sociable, aunque también impulsiva. Mai es más estable y reservada. Las diferencias modifican decisiones sociales y reacciones a fenómenos de la casa.
 
-- `src/main.rs` y `src/native.rs`: aplicación, GPU e interacción 3D.
-- `src/geometry.rs` y `src/scene.rs`: habitación y personaje articulado.
-- `src/human.rs`: superficies anatómicas, ropa y esqueleto humano.
-- `src/society.rs`: residentes, encuentros físicos y conversaciones recíprocas.
-- `src/game.rs`: necesidades, autonomía, navegación y actividades.
-- `src/psychology.rs`: propietario Rust del runtime y traducción de estados a expresiones.
-- `native/mspa_bridge.cpp`: Domain Pack de la casa y puente con el núcleo MSPA real.
-- `vendor/MSPA-Lib`: núcleo original, sin modificaciones y con revisión fijada.
-- `build.rs`: compilación estática de MSPA como parte de Cargo.
-- `src/ui.rs`: creador y controles dibujados en Rust.
-- `tests/`: navegación original, controles y escenarios de integración del personaje.
+## Agencia invisible e interacción
 
-El workflow de GitHub Actions se inicia manualmente y solo compila y adjunta
-el ejecutable de Windows. No ejecuta validaciones automáticas ni genera
-versiones para otros sistemas operativos.
+El usuario no controla directamente a las residentes. Las personas toman decisiones mediante su simulación y MSPA.
 
-Consulta `THIRD_PARTY.md` para las dependencias y sus licencias.
+Los clics sobre elementos de la casa representan una intervención ambiental anónima. La simulación no entrega a MSPA una identidad causal de “jugador”. Por ejemplo:
+
+- la televisión puede encenderse sola;
+- la ducha puede abrirse sin nadie dentro;
+- la cama puede hundirse;
+- la cisterna puede sonar;
+- la vajilla puede moverse o golpear la encimera.
+
+Las chicas perciben el resultado, lo incorporan a su estado MSPA y reaccionan según personalidad, amenaza percibida, exploración y experiencia previa.
+
+## Progresión sobrenatural idle
+
+La presencia sobrenatural acumula esencia con el tiempo incluso sin interacción. La actividad en la casa y las conversaciones aceleran ligeramente el progreso; las intervenciones ambientales también aportan esencia.
+
+Hay 20 niveles desbloqueables:
+
+1. Crujidos
+2. Golpes lejanos
+3. Pasos sin dueño
+4. Objetos desplazados
+5. Susurros
+6. Voces lejanas
+7. Voces que responden
+8. Sombras periféricas
+9. Luces inestables
+10. Puertas inquietas
+11. Frío localizado
+12. Reflejos imposibles
+13. Presencia
+14. Siluetas fugaces
+15. Contacto invisible
+16. Apariciones parciales
+17. Espectro tenue
+18. Espectros móviles
+19. Interacción espectral
+20. Manifestación completa
+
+El HUD muestra nivel, progreso, siguiente desbloqueo y fenómeno reciente. Los poderes ya desbloqueados pueden recorrerse y manifestarse manualmente. Desde el nivel 9 aparecen efectos de iluminación; desde el 17 pueden hacerse visibles espectros y los niveles finales aumentan su duración y presencia.
+
+Los eventos no producen una reacción genérica. MSPA condiciona si cada personaje responde con miedo, curiosidad, ansiedad, escepticismo o desafío, y la presentación utiliza una voz distinta por perfil.
+
+## Mobiliario
+
+Los muebles visibles son los GLB suministrados: cama, sofá, mesas, sillas y set de baño. Sus tamaños se normalizan mediante transformaciones de escena; los proxies invisibles sólo sirven para navegación e interacción.
+
+El set adicional `furniture_set.glb` permanece disponible en `assets/furniture/` para ampliar decoración sin mezclarlo con la lógica de la casa.
+
+## Organización del código
+
+- `src/native.rs`: ensamblaje de la aplicación Bevy.
+- `src/native_scene.inc.rs`: carga de GLB y composición runtime.
+- `src/native_runtime.inc.rs`: cámara, cutaway, animaciones y actualización visual.
+- `src/native_interaction.inc.rs`: selección e interacción 3D.
+- `src/scene.rs`: especificación de proxies y efectos ligeros.
+- `src/house.rs`: colisiones de la arquitectura real.
+- `src/furnishings.rs`: proxies de mobiliario importado.
+- `src/character_catalog.rs`: catálogo, escala, animaciones y perfil de cada chica.
+- `src/character_ui.rs`: selector de personaje.
+- `src/society.rs`: residentes exteriores, relaciones y encuentros MSPA.
+- `src/psychology.rs`: propiedad Rust del runtime MSPA.
+- `src/mspa_ui.rs`: visor de rasgos por personaje.
+- `src/perception.rs`: percepción anónima de cambios ambientales.
+- `src/poltergeist.rs`: intervenciones ambientales sin actor identificado.
+- `src/poltergeist_ui.rs`: controles de intervención de la casa.
+- `src/haunting.rs`: progresión sobrenatural de 20 niveles.
+- `src/haunting_ui.rs`: progreso y selector de poderes.
+- `src/game.rs`: necesidades, decisiones autónomas y navegación.
+- `native/mspa_bridge.cpp`: puente C++ y perfiles MSPA.
+- `vendor/MSPA-Lib`: núcleo MSPA-Lib.
+
+## Estado de sesión
+
+La psicología y la progresión sobrenatural se mantienen durante la ejecución actual. El guardado persistente y la progresión offline todavía no están implementados.
+
+Consulta `THIRD_PARTY.md` para dependencias y licencias.
