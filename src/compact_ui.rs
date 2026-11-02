@@ -1,5 +1,5 @@
 use crate::{
-    game::{Game, Phase},
+    game::Game,
     haunting::Haunting,
     haunting_ui,
     mspa_ui,
@@ -7,7 +7,7 @@ use crate::{
     society::Society,
     ui as legacy_ui,
 };
-use bevy_egui::egui::{self, Color32, Id, RichText, vec2};
+use bevy_egui::egui::{self, Color32, Id, RichText};
 
 const PANEL: Color32 = Color32::from_rgba_premultiplied(247, 245, 236, 232);
 const INK: Color32 = Color32::from_rgb(42, 50, 52);
@@ -34,9 +34,7 @@ pub fn draw(
 
     let screen = ctx.content_rect();
     let width = screen.width();
-    let height = screen.height();
 
-    // Compact top bar: this is the only permanent panel at the top.
     let bar_w = 520.0_f32.min((width - 24.0).max(260.0));
     let bar_pos = egui::pos2(screen.center().x - bar_w * 0.5, screen.top() + 10.0);
     egui::Area::new(Id::new("compact-topbar"))
@@ -62,7 +60,6 @@ pub fn draw(
                 });
         });
 
-    // Minimal status card. No second psychology card and no permanent action bar.
     let status_pos = egui::pos2(screen.left() + 12.0, screen.bottom() - 96.0);
     egui::Area::new(Id::new("compact-status"))
         .fixed_pos(status_pos)
@@ -123,8 +120,5 @@ pub fn draw(
         return haunting_ui::draw(ctx, haunting);
     }
 
-    // Keep the centre of the viewport free. The character bubble is handled by
-    // native_scene only while the character is actually walking/using/talking.
-    let _ = (height, Phase::Idle, vec2(0.0, 0.0));
     None
 }
