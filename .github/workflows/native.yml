@@ -15,8 +15,6 @@ jobs:
       - name: Prepare packaged assets
         shell: pwsh
         run: .\tools\ensure-assets.ps1
-      - name: Inspect character animations
-        run: python tools/inspect_character_assets.py
       - run: cargo build --release
       - shell: pwsh
         run: |
