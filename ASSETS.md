@@ -1,10 +1,10 @@
 # Imported 3D assets
 
-The runtime deliberately loads the user-supplied GLB files directly from `assets/`; it does not reconstruct or decimate them into procedural meshes.
+The runtime loads the GLB files directly from `assets/`; it does not reconstruct or decimate them into procedural meshes.
 
 Expected paths:
 
-- `assets/house/house.glb` — `(PSX) - Backroom`, used as the complete visible house interior.
+- `assets/house/house.glb` — `(PSX) - Backroom`, complete visible house interior.
 - `assets/characters/mia.glb`
 - `assets/characters/kurumi.glb`
 - `assets/characters/mai.glb`
@@ -18,23 +18,18 @@ Expected paths:
 - `assets/furniture/bed.glb`
 - `assets/furniture/furniture_set.glb`
 
-The standing pink-shirt/blue-jeans reference character is deliberately not listed: only a reference image is available, not its actual 3D model. The rejected kneeling OBJ is never substituted for it.
+The standing pink-shirt/blue-jeans reference character is deliberately not listed: only a reference image is available, not its actual 3D model.
 
 ## House interior
 
-`assets/house/house.glb` is the supplied `(PSX) - Backroom` model by Kasuga. Its own glTF node transforms already contain the Sketchfab/FBX unit conversion, so the runtime keeps the model at `scale = 1.0` and preserves its original mesh, UVs, materials and embedded textures.
+`assets/house/house.glb` is `(PSX) - Backroom` by Kasugay. Its glTF node transforms already contain the Sketchfab/FBX unit conversion, so the runtime keeps the model at `scale = 1.0` and preserves its original mesh, UVs, materials and embedded textures.
 
-Measured after those internal transforms, the model occupies approximately `46.8974 × 55.0137 m` in X/Z and `4.9106 m` vertically. The scene root translates it by `(-3.195875, +1.246176, +20.446539)` so the footprint is centred on X/Z and the lowest floor geometry sits at `Y = 0`.
+The model is centred on X/Z. The actual carpet/floor mesh (`Backroom_lambert2_0`) is aligned to simulation `Y = 0`; characters no longer use the lower decorative geometry as their floor reference.
 
-The raw GLB is intentionally not rehosted by this public repository. During a local build, `build.rs` validates the exact supplied asset (1,110,456 bytes and GLB header) and automatically installs it from the first valid location found among:
+The Windows artifact **contains** `assets/house/house.glb`. A source checkout runs `tools/ensure-assets.ps1` before compiling and obtains the pinned project asset directly from an immutable source revision when it is missing. The build never scans `Downloads`, `Desktop`, environment-specific personal folders, or arbitrary local GLB files.
 
-- `MENS_LIFE_HOUSE_GLB`
-- the repository root
-- the user's `Downloads` directory
-- the user's `Desktop` directory
+`build.rs` only validates the packaged `assets/house/house.glb`; it does not search the user's filesystem.
 
-Accepted local filenames are `psx_-_backroom.glb`, `psx-backroom.glb`, and `house.glb`.
+The old Two Stories / Autumn House assets were removed. The Backroom is the only visible house architecture. The three top meshes (`Backroom_lambert5_0`, `Backroom_lambert6_0`, `Backroom_lambert7_0`) are treated as the ceiling cutaway while the resident is indoors.
 
-The model itself is the visible architecture. The old Two Stories / Autumn House shell is no longer rendered. The three top meshes (`Backroom_lambert5_0`, `Backroom_lambert6_0`, `Backroom_lambert7_0`) are treated as the ceiling cutaway while the resident is indoors. Gameplay furniture and house boundaries remain lightweight invisible interaction/navigation proxies only.
-
-Character and furniture geometry, skinning and animation data are preserved. Asset sizing is handled by scene transforms. Large embedded textures may be resized for runtime memory use without decimating meshes, changing UVs, removing bones or stripping animation clips.
+Character geometry, skinning and animation data are preserved. Asset sizing is handled by scene transforms.
