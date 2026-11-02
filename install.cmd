@@ -22,8 +22,17 @@ if /I not "%OLD_HEAD%"=="%NEW_HEAD%" set "NEED_BUILD=1"
 if not exist "target\release\mens-life.exe" set "NEED_BUILD=1"
 if not exist "mens-life.exe" set "NEED_BUILD=1"
 
-rem Si falta el interior, fuerza build.rs para localizar/copiar el GLB suministrado.
-if not exist "assets\house\house.glb" set "NEED_BUILD=1"
+set "HOUSE_VALID=0"
+if exist "assets\house\house.glb" (
+    for %%I in ("assets\house\house.glb") do if "%%~zI"=="1110460" set "HOUSE_VALID=1"
+)
+if "%HOUSE_VALID%"=="0" set "NEED_BUILD=1"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\ensure-assets.ps1"
+if errorlevel 1 (
+    echo [ERROR] No se pudo preparar el PSX Backroom incluido por el proyecto.
+    exit /b 1
+)
 
 if "%NEED_BUILD%"=="0" (
     echo [mens-life] Ya esta actualizado. No hay nada que instalar.
@@ -39,19 +48,6 @@ if errorlevel 1 (
 
 if not exist "target\release\mens-life.exe" (
     echo [ERROR] La compilacion termino sin generar target\release\mens-life.exe.
-    exit /b 1
-)
-
-if not exist "assets\house\house.glb" (
-    echo [ERROR] No se encontro el interior PSX Backroom.
-    echo         Deja psx_-_backroom.glb en esta carpeta, Descargas o Escritorio,
-    echo         o define MENS_LIFE_HOUSE_GLB con la ruta del archivo.
-    exit /b 1
-)
-
-for %%I in ("assets\house\house.glb") do set "HOUSE_SIZE=%%~zI"
-if not "%HOUSE_SIZE%"=="1110456" (
-    echo [ERROR] assets\house\house.glb no es el archivo esperado ^(tamano: %HOUSE_SIZE% bytes^).
     exit /b 1
 )
 
