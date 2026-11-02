@@ -13,12 +13,11 @@ use bevy::{
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
 use mens_life::{
-    character_catalog::{self, CHARACTERS}, character_ui,
+    character_catalog::{self, CHARACTERS}, character_ui, compact_ui,
     game::{self, Game, Navigation, Task, Vec3 as Point},
     geometry,
     haunting::Haunting,
-    haunting_ui,
-    mspa_ui, perception,
+    perception,
     poltergeist::Poltergeist,
     scene::{self, Avatar}, society::Society, ui,
 };
