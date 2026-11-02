@@ -15,8 +15,6 @@ fn pick(
     if contexts.ctx_mut().is_ok_and(|ctx|ctx.is_pointer_over_area()){return;}
     let Some(cursor)=window.cursor_position()else{return;};let Ok(ray)=camera.0.viewport_to_world(camera.1,cursor)else{return;};
 
-    // Character roots are selected with a small world-space capsule proxy, so complex
-    // imported GLBs remain untouched while still being clickable.
     let mut character_hit=None;let mut character_t=f32::INFINITY;
     for(root,transform)in &characters{
         if root.profile_index==life.avatar.character{continue;}
@@ -30,7 +28,7 @@ fn pick(
     if let Some(profile)=character_hit&&character_t<closest{
         if let Some((id,name))=life.society.residents.iter().find(|r|r.profile_index==profile).map(|resident|(resident.id,resident.avatar.name.clone())){
             life.society.selected=Some(id);
-            life.society.status=format!("{} está afuera",name);
+            life.society.status=format!("{} está en casa",name);
         }
         return;
     }
