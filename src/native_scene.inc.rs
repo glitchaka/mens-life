@@ -48,9 +48,11 @@ fn setup(
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
         if !spec.available{continue;}
         let p=if profile_index==life.avatar.character{life.game.frame.position}else{life.society.residents.iter().find(|r|r.profile_index==profile_index).map(|r|r.frame.position).unwrap_or(Point::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]))};
+        let source:Handle<Gltf>=asset_server.load(spec.asset);
+        let correction=Quat::from_rotation_y(spec.forward_yaw)*Quat::from_rotation_x(spec.rotation_x);
         commands.spawn((
-            gltf_asset(&asset_server,spec.asset),CharacterRoot{profile_index},Name::new(format!("Character:{}",spec.name)),
-            Transform{translation:Vec3::new(p.x as f32,p.y as f32+spec.vertical_offset,p.z as f32),rotation:Quat::from_rotation_x(spec.rotation_x),scale:Vec3::splat(spec.scale)},
+            PendingGltf(source.clone()),CharacterSource(source),CharacterRoot{profile_index},Name::new(format!("Character:{}",spec.name)),
+            Transform{translation:Vec3::new(p.x as f32,p.y as f32+spec.vertical_offset,p.z as f32),rotation:correction,scale:Vec3::splat(spec.scale)},
         ));
     }
 
