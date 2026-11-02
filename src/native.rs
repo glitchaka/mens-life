@@ -36,7 +36,7 @@ struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, 
 #[derive(Component)] struct CutawayPart(CutawaySide);
 #[derive(Component)] struct CharacterAnimation { profile_index: usize, idle: Option<AnimationNodeIndex>, walk: Option<AnimationNodeIndex>, walking: bool }
 #[derive(Resource)] struct CameraOrbit { yaw: f32, radius: f32, height: f32 }
-impl Default for CameraOrbit { fn default() -> Self { Self { yaw: 0.72, radius: 15.5, height: 11.5 } } }
+impl Default for CameraOrbit { fn default() -> Self { Self { yaw: 0.72, radius: 13.5, height: 19.5 } } }
 #[derive(Resource, Default)] struct Materials(HashMap<String, Handle<StandardMaterial>>);
 #[derive(Resource, Default)] struct Capture { path: Option<String>, frame: u32, requested: bool, skip_creator: bool, task: Option<Task>, simulate: u32 }
 
@@ -69,7 +69,7 @@ pub fn run(){
         .register_type::<GlobalTransform>()
         .insert_resource(Life{game,avatar,society,haunting:Haunting::default(),poltergeist:Poltergeist::default(),changed:false,random})
         .insert_resource(capture).insert_resource(CameraOrbit::default())
-        .insert_resource(ClearColor(rgb(0x9ec7d0))).insert_resource(AmbientLight{color:rgb(0xfff6df),brightness:1.6,..default()}).insert_resource(DirectionalLightShadowMap{size:2048}).init_resource::<Materials>()
+        .insert_resource(ClearColor(rgb(0x9ec7d0))).insert_resource(AmbientLight{color:rgb(0xfff6df),brightness:1.8,..default()}).insert_resource(DirectionalLightShadowMap{size:2048}).init_resource::<Materials>()
         .add_plugins(DefaultPlugins
             .set(AssetPlugin{file_path:assets,..default()})
             .set(WindowPlugin{primary_window:Some(Window{title:"Vida Isométrica 3D".into(),resolution:WindowResolution::new(1280,800),..default()}),..default()}))
