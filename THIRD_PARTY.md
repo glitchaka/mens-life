@@ -14,11 +14,15 @@ DejaVu Sans (Bitstream Vera / DejaVu), con los textos de licencia en
 `assets/fonts/`. Las fuentes predeterminadas de egui incluyen Ubuntu (Ubuntu Font Licence)
 y Hack (MIT / Bitstream Vera). Se integran mediante la dependencia egui.
 
-El interior visible de la casa usa `(PSX) - Backroom`, creado por Kasuga.
-Fuente del autor: `https://kasuga.itch.io/psx-backroom`.
-La página de distribución exige crédito al usar el asset. El archivo GLB se
-suministra localmente por el propietario del proyecto y no se redistribuye en
-este repositorio público.
+El interior visible de la casa usa `(PSX) - Backroom`, creado por Kasugay.
+Los metadatos embebidos en el GLB suministrado indican:
+
+- Autor: `Kasugay` — `https://sketchfab.com/Kasugay`
+- Fuente: `https://sketchfab.com/3d-models/psx-backroom-20643a0f60ba4a9f81a4a96996d2d488`
+- Licencia declarada por el archivo: `SKETCHFAB Standard` — `https://sketchfab.com/licenses`
+
+El GLB se suministra localmente por el propietario del proyecto y no se
+redistribuye como archivo fuente en este repositorio público.
 
 El grafo completo de dependencias y versiones está en `Cargo.lock`.
 Sus licencias se conservan en los paquetes publicados por cada autor.
