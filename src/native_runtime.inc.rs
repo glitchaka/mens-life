@@ -24,7 +24,10 @@ fn perceive_world(mut life:ResMut<Life>,mut awareness:Local<perception::WorldAwa
 fn tag_cutaway_parts(mut commands:Commands,names:Query<(Entity,&Name),Added<Name>>){
     for(entity,name)in &names{
         let s=name.as_str();
-        let side=if s.starts_with("CUTAWAY_ROOF__"){Some(CutawaySide::Roof)}else if s.starts_with("CUTAWAY_EAST__"){Some(CutawaySide::East)}else if s.starts_with("CUTAWAY_WEST__"){Some(CutawaySide::West)}else if s.starts_with("CUTAWAY_NORTH__"){Some(CutawaySide::North)}else if s.starts_with("CUTAWAY_SOUTH__"){Some(CutawaySide::South)}else{None};
+        let side=if s.starts_with("CUTAWAY_ROOF__")
+            ||s=="Backroom_lambert7_0"
+            ||s=="Backroom_lambert6_0"
+        {Some(CutawaySide::Roof)}else if s.starts_with("CUTAWAY_EAST__"){Some(CutawaySide::East)}else if s.starts_with("CUTAWAY_WEST__"){Some(CutawaySide::West)}else if s.starts_with("CUTAWAY_NORTH__"){Some(CutawaySide::North)}else if s.starts_with("CUTAWAY_SOUTH__"){Some(CutawaySide::South)}else{None};
         if let Some(side)=side{commands.entity(entity).insert(CutawayPart(side));}
     }
 }
@@ -60,12 +63,13 @@ fn rotate_camera(
     if keys.pressed(KeyCode::KeyE)||keys.pressed(KeyCode::ArrowRight){delta-=time.delta_secs()*1.25;}
     if buttons.pressed(MouseButton::Right){delta-=mouse.delta.x*0.008;}
     orbit.yaw=(orbit.yaw+delta).rem_euclid(std::f32::consts::TAU);
-    let focus=Vec3::new(-2.5,0.7,0.0);
+
+    let p=life.game.ground_position;
+    let focus=Vec3::new(p.x as f32,0.8,p.z as f32);
     let offset=Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
     **camera=Transform::from_translation(focus+offset).looking_at(focus,Vec3::Y);
 
-    let p=life.game.ground_position;
-    let indoors=(-4.76..=-1.18).contains(&p.x)&&(-3.28..=3.34).contains(&p.z);
+    let indoors=(-13.68..=13.68).contains(&p.x)&&(-16.04..=16.04).contains(&p.z);
     let sx=offset.x.signum();let sz=offset.z.signum();
     for(part,mut visibility)in &mut cutaway{
         let hide=indoors&&match part.0{
@@ -123,8 +127,8 @@ fn animate(
     for mut light in &mut point_lights{
         let wave=((life.game.game_time*31.0).sin()*0.5+0.5)as f32;
         let factor=if haunting_light{0.18+wave*0.82}else{1.0};
-        light.intensity=18.0*std::f32::consts::TAU*2.0*factor;
-        light.color=if haunting_light&&life.haunting.level>=11{rgb(0xc9e8ee)}else{rgb(0xffd89b)};
+        light.intensity=900.0*factor;
+        light.color=if haunting_light&&life.haunting.level>=11{rgb(0xc9e8ee)}else{rgb(0xffe6a8)};
     }
     let tv_active=life.game.frame.watching||life.poltergeist.active(Task::Tv);
     if let Some(mat)=shared.0.get("tv-screen").and_then(|h|materials.get_mut(h)){mat.base_color=rgb(if tv_active{0x79a7d3}else{0x17212b});mat.emissive=Color::hsl(life.game.frame.screen_hue as f32*360.0,0.4,if tv_active{0.4}else{0.03}).to_linear();}
