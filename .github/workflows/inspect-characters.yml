@@ -1,0 +1,22 @@
+name: Inspect character GLB animations
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/inspect_character_assets.py'
+      - 'assets/*.glb'
+      - '.github/workflows/inspect-characters.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect character animation clips
+        run: python tools/inspect_character_assets.py | tee character-animation-report.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: character-animation-report
+          path: character-animation-report.txt
