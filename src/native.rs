@@ -35,6 +35,8 @@ struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, 
 #[derive(Clone, Copy, Component, PartialEq, Eq)] enum CutawaySide { Roof, East, West, North, South }
 #[derive(Component)] struct CutawayPart(CutawaySide);
 #[derive(Component)] struct CharacterAnimation { profile_index: usize, idle: Option<AnimationNodeIndex>, walk: Option<AnimationNodeIndex>, walking: bool }
+#[derive(Clone, Copy)] enum ProceduralBoneKind { UpperLegL, UpperLegR, LowerLegL, LowerLegR, UpperArmL, UpperArmR, LowerArmL, LowerArmR }
+#[derive(Component)] struct ProceduralBone { profile_index: usize, kind: ProceduralBoneKind, rest: Quat }
 #[derive(Resource)] struct CameraOrbit { yaw: f32, radius: f32, height: f32 }
 impl Default for CameraOrbit { fn default() -> Self { Self { yaw: 0.72, radius: 10.5, height: 8.5 } } }
 #[derive(Resource, Default)] struct Materials(HashMap<String, Handle<StandardMaterial>>);
@@ -77,7 +79,7 @@ pub fn run(){
         .add_systems(Startup,setup)
         .add_systems(PreUpdate,configure_interface.after(EguiPreUpdateSet::InitContexts).before(EguiPreUpdateSet::BeginPass))
         .add_systems(EguiPrimaryContextPass,interface)
-        .add_systems(Update,(apply_selection,advance,perceive_world,resolve_gltf,tag_cutaway_parts,setup_character_animations,rotate_camera,animate,pick,capture_frame).chain())
+        .add_systems(Update,(apply_selection,advance,perceive_world,resolve_gltf,tag_cutaway_parts,tag_procedural_bones,setup_character_animations,rotate_camera,animate,procedural_gait,pick,capture_frame).chain())
         .run();
 }
 include!("native_scene.inc.rs");
