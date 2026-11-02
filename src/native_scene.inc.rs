@@ -30,19 +30,21 @@ fn setup(
     mut life:ResMut<Life>,
     capture:Res<Capture>,
 ){
-    // Replacement house. The Sketchfab GLB is already converted to glTF units,
-    // so do not apply the old Autumn House feet-to-metres scale.
-    // Offset it over the simulation's existing activity coordinates while its
-    // exact room bounds are being calibrated from the imported model.
+    // The supplied PSX Backroom is authored in large source units. 0.1 gives it a
+    // usable ~27 x 32 metre footprint and ~2.3 metre ceiling. Translation centres
+    // the room at the simulation origin and places its carpet/floor at Y = 0.
     commands.spawn((
-        gltf_asset(&asset_server,"two_stories_with_interiors.glb"),
-        Name::new("TwoStoriesHouse"),
-        Transform::from_translation(Vec3::new(-3.0,0.0,0.0)),
+        gltf_asset(&asset_server,"house/house.glb"),
+        Name::new("PsxBackroomHouse"),
+        Transform{
+            translation:Vec3::new(-1.86438,0.196013,11.92789),
+            rotation:Quat::IDENTITY,
+            scale:Vec3::splat(0.1),
+        },
     ));
 
-    // The replacement house is already furnished. Do not duplicate the old standalone
-    // furniture GLBs on top of its interior; interaction proxies remain lightweight/invisible.
-
+    // Visible furnishings come from the GLB. Existing gameplay furniture remains
+    // as invisible interaction proxies only.
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
         if !spec.available{continue;}
         let p=if profile_index==life.avatar.character{life.game.frame.position}else{life.society.residents.iter().find(|r|r.profile_index==profile_index).map(|r|r.frame.position).unwrap_or(Point::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]))};
@@ -70,10 +72,15 @@ fn setup(
         let entity=entity.id();entities.insert(id.into(),entity);
     }
 
-    commands.spawn((DirectionalLight{color:rgb(0xfff0cf),illuminance:3.3,shadows_enabled:true,shadow_depth_bias:0.02,shadow_normal_bias:1.8,..default()},CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:55.0,..default()}.build(),Transform::from_xyz(-8.0,18.0,11.0).looking_at(Vec3::new(-2.5,0.0,0.0),Vec3::Y)));
-    commands.spawn((PointLight{color:rgb(0xffd89b),intensity:18.0*std::f32::consts::TAU*2.0,range:9.0,..default()},Transform::from_xyz(-2.9,2.8,0.0)));
-    let orbit=CameraOrbit::default();let focus=Vec3::new(-2.5,0.7,0.0);let camera_pos=focus+Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
-    commands.spawn((CameraRig,Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:15.5,min_height:10.5},..OrthographicProjection::default_3d()}),Transform::from_translation(camera_pos).looking_at(focus,Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:28.0,end:52.0},..default()}));
+    commands.spawn((DirectionalLight{color:rgb(0xfff0cf),illuminance:2.2,shadows_enabled:true,shadow_depth_bias:0.02,shadow_normal_bias:1.8,..default()},CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:55.0,..default()}.build(),Transform::from_xyz(-8.0,20.0,11.0).looking_at(Vec3::ZERO,Vec3::Y)));
+    for [x,z] in [[0.0,0.0],[-8.0,-8.0],[8.0,-8.0],[-8.0,8.0],[8.0,8.0]]{
+        commands.spawn((PointLight{color:rgb(0xffe6a8),intensity:900.0,range:11.0,shadows_enabled:false,..default()},Transform::from_xyz(x,2.15,z)));
+    }
+    let orbit=CameraOrbit::default();
+    let p=life.game.ground_position;
+    let focus=Vec3::new(p.x as f32,0.8,p.z as f32);
+    let camera_pos=focus+Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
+    commands.spawn((CameraRig,Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:18.0,min_height:11.25},..OrthographicProjection::default_3d()}),Transform::from_translation(camera_pos).looking_at(focus,Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:35.0,end:60.0},..default()}));
 
     if let Some(task)=capture.task{life.game.command(task);}
     for i in 0..capture.simulate{
