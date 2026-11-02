@@ -1,60 +1,23 @@
-use std::{fs, path::{Path, PathBuf}};
+use std::{fs, path::Path};
 
-const HOUSE_ASSET_BYTES: u64 = 1_110_456;
-const HOUSE_NAMES: [&str; 3] = ["psx_-_backroom.glb", "psx-backroom.glb", "house.glb"];
+const HOUSE_ASSET_BYTES: u64 = 1_110_460;
 
-fn valid_house_asset(path: &Path) -> bool {
-    let Ok(metadata) = fs::metadata(path) else { return false; };
-    if metadata.len() != HOUSE_ASSET_BYTES { return false; }
-    let Ok(bytes) = fs::read(path) else { return false; };
-    bytes.starts_with(b"glTF")
-}
-
-fn house_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(explicit) = std::env::var("MENS_LIFE_HOUSE_GLB") {
-        candidates.push(PathBuf::from(explicit));
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        for name in HOUSE_NAMES { candidates.push(cwd.join(name)); }
-    }
-    for home_key in ["USERPROFILE", "HOME"] {
-        if let Ok(home) = std::env::var(home_key) {
-            let home = PathBuf::from(home);
-            for directory in ["Downloads", "Desktop"] {
-                for name in HOUSE_NAMES {
-                    candidates.push(home.join(directory).join(name));
-                }
-            }
-        }
-    }
-    candidates
-}
-
-fn install_house_asset() {
+fn verify_house_asset() {
     let target = Path::new("assets/house/house.glb");
-    println!("cargo:rerun-if-env-changed=MENS_LIFE_HOUSE_GLB");
+    println!("cargo:rerun-if-changed={}", target.display());
 
-    if valid_house_asset(target) {
-        println!("cargo:rerun-if-changed={}", target.display());
-        return;
-    }
-    if target.exists() {
-        let _ = fs::remove_file(target);
-    }
-
-    for source in house_candidates() {
-        println!("cargo:rerun-if-changed={}", source.display());
-        if !valid_house_asset(&source) { continue; }
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).expect("Cannot create assets/house");
-        }
-        fs::copy(&source, target).expect("Cannot install PSX Backroom house asset");
-        println!("cargo:warning=Installed PSX Backroom from {}", source.display());
-        return;
-    }
-
-    println!("cargo:warning=PSX Backroom not found. Put psx_-_backroom.glb in the repo root, Downloads, Desktop, or set MENS_LIFE_HOUSE_GLB.");
+    let bytes = fs::read(target).expect(
+        "PSX Backroom is missing from assets/house/house.glb. Run install.cmd (or tools/ensure-assets.ps1) before building.",
+    );
+    assert_eq!(
+        bytes.len() as u64,
+        HOUSE_ASSET_BYTES,
+        "PSX Backroom package size mismatch",
+    );
+    assert!(bytes.starts_with(b"glTF"), "PSX Backroom package is not a GLB");
+    assert!(bytes.len() >= 12, "PSX Backroom GLB header is truncated");
+    let declared = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
+    assert_eq!(declared, bytes.len(), "PSX Backroom GLB length header mismatch");
 }
 
 fn sources(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
@@ -69,7 +32,7 @@ fn sources(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
 }
 
 fn main() {
-    install_house_asset();
+    verify_house_asset();
     println!("cargo:rerun-if-changed=vendor/MSPA-Lib/include");
     println!("cargo:rerun-if-changed=vendor/MSPA-Lib/src");
     println!("cargo:rerun-if-changed=native/mspa_bridge.h");
