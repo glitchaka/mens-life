@@ -2,6 +2,9 @@
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
+set "BUILD_LOG=%TEMP%\mens-life-build.log"
+if exist "%BUILD_LOG%" del /Q "%BUILD_LOG%" >nul 2>&1
+
 echo [mens-life] Revisando actualizaciones...
 for /f %%H in ('git rev-parse HEAD 2^>nul') do set "OLD_HEAD=%%H"
 if not defined OLD_HEAD (
@@ -39,10 +42,12 @@ if "%NEED_BUILD%"=="0" (
     exit /b 0
 )
 
-echo [mens-life] Hay cambios o faltan archivos. Compilando Release...
-cargo build --release
+echo [mens-life] Compilando Release...
+cargo build --release --quiet >"%BUILD_LOG%" 2>&1
 if errorlevel 1 (
     echo [ERROR] La compilacion fallo. Se conserva el ejecutable anterior.
+    echo.
+    type "%BUILD_LOG%"
     exit /b 1
 )
 
@@ -56,6 +61,8 @@ if errorlevel 1 (
     echo [ERROR] No se pudo instalar mens-life.exe en la raiz del proyecto.
     exit /b 1
 )
+
+if exist "%BUILD_LOG%" del /Q "%BUILD_LOG%" >nul 2>&1
 
 echo [mens-life] Instalacion actualizada correctamente.
 echo [mens-life] Ejecutable: %CD%\mens-life.exe
