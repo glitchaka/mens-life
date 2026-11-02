@@ -3,7 +3,7 @@ use bevy::{
     asset::AssetPlugin,
     camera::{Exposure, ScalingMode},
     core_pipeline::tonemapping::Tonemapping,
-    gltf::{Gltf, GltfAssetLabel},
+    gltf::Gltf,
     light::{CascadeShadowConfigBuilder, DirectionalLightShadowMap, NotShadowCaster, NotShadowReceiver, ShadowFilteringMethod},
     mesh::VertexAttributeValues,
     prelude::*,
@@ -29,6 +29,7 @@ struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, 
 #[derive(Component)] struct NodeId(String);
 #[derive(Component)] struct Furniture(Task);
 #[derive(Component)] struct PendingGltf(Handle<Gltf>);
+#[derive(Component)] struct CharacterSource(Handle<Gltf>);
 #[derive(Component)] struct CharacterRoot { profile_index: usize }
 #[derive(Component)] struct CameraRig;
 #[derive(Clone, Copy, Component, PartialEq, Eq)] enum CutawaySide { Roof, East, West, North, South }
