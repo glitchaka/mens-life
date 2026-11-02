@@ -54,8 +54,8 @@ fn named_animation(gltf:&Gltf,keywords:&[&str])->Option<Handle<AnimationClip>>{
 
 fn bone_side(name:&str)->Option<bool>{
     let n=name.to_ascii_lowercase();
-    let left=n.contains(".l")||n.contains("_l")||n.contains("left");
-    let right=n.contains(".r")||n.contains("_r")||n.contains("right");
+    let left=n.contains(".l_")||n.contains(".l.")||n.ends_with(".l")||n.contains("_l_")||n.ends_with("_l")||n.contains("left");
+    let right=n.contains(".r_")||n.contains(".r.")||n.ends_with(".r")||n.contains("_r_")||n.ends_with("_r")||n.contains("right");
     match(left,right){(true,false)=>Some(true),(false,true)=>Some(false),_=>None}
 }
 
@@ -143,7 +143,7 @@ fn rotate_camera(
 
 fn character_is_moving(life:&Life,profile:usize)->bool{
     if profile==life.avatar.character{life.game.phase==game::Phase::Walking}
-    else{life.society.residents.iter().find(|r|r.profile_index==profile).is_some_and(|r|r.action.starts_with("Paseando")&&!r.path.is_empty())}
+    else{life.society.residents.iter().find(|r|r.profile_index==profile).is_some_and(|r|r.action.starts_with("Paseando"))}
 }
 
 fn animate(
