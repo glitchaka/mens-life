@@ -43,7 +43,7 @@ fn find_character_root(mut entity:Entity,parents:&Query<&ChildOf>,roots:&Query<(
 fn named_animation(gltf:&Gltf,keywords:&[&str])->Option<Handle<AnimationClip>>{
     for keyword in keywords{
         for(name,clip)in &gltf.named_animations{
-            let normalized=name.to_ascii_lowercase().replace(['-','_','.'],' ');
+            let normalized=name.to_ascii_lowercase().replace(['-','_','.']," ");
             if normalized.split_whitespace().any(|part|part==*keyword)||normalized.contains(keyword){
                 return Some(clip.clone());
             }
