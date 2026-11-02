@@ -31,20 +31,20 @@ fn setup(
     capture:Res<Capture>,
 ){
     // The GLB already contains the Sketchfab/FBX conversion transforms.
-    // Its final world bounds are about 46.90 x 55.01 metres with floor at Y=-1.246.
-    // Keep scale 1:1, centre X/Z on the simulation origin and place the floor at Y=0.
+    // lambert2 is the actual horizontal carpet/floor plane at world Y=-0.336001.
+    // Keep scale 1:1, centre X/Z and align that floor plane to simulation Y=0.
     commands.spawn((
         gltf_asset(&asset_server,"house/house.glb"),
         Name::new("PsxBackroomHouse"),
         Transform{
-            translation:Vec3::new(-3.1958754,1.2461756,20.44654),
+            translation:Vec3::new(-3.1958754,0.3360012,20.44654),
             rotation:Quat::IDENTITY,
             scale:Vec3::ONE,
         },
     ));
 
-    // Visible architecture and furnishings come from the GLB. Existing gameplay
-    // geometry remains invisible and only provides interaction/navigation proxies.
+    // Visible architecture comes from the GLB. Gameplay geometry is invisible and
+    // only supplies interaction proxies while the Backroom interaction map is calibrated.
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
         if !spec.available{continue;}
         let p=if profile_index==life.avatar.character{life.game.frame.position}else{life.society.residents.iter().find(|r|r.profile_index==profile_index).map(|r|r.frame.position).unwrap_or(Point::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]))};
@@ -72,10 +72,9 @@ fn setup(
         let entity=entity.id();entities.insert(id.into(),entity);
     }
 
-    // The source textures already carry the PSX look; lights only make the room readable.
-    commands.spawn((DirectionalLight{color:rgb(0xfff0cf),illuminance:1.7,shadows_enabled:true,shadow_depth_bias:0.02,shadow_normal_bias:1.8,..default()},CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:70.0,..default()}.build(),Transform::from_xyz(-12.0,24.0,14.0).looking_at(Vec3::ZERO,Vec3::Y)));
+    commands.spawn((DirectionalLight{color:rgb(0xfff0cf),illuminance:1.35,shadows_enabled:true,shadow_depth_bias:0.02,shadow_normal_bias:1.8,..default()},CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:70.0,..default()}.build(),Transform::from_xyz(-12.0,24.0,14.0).looking_at(Vec3::ZERO,Vec3::Y)));
     for [x,z] in [[0.0,0.0],[-12.0,-12.0],[12.0,-12.0],[-12.0,12.0],[12.0,12.0]]{
-        commands.spawn((PointLight{color:rgb(0xffe6a8),intensity:1050.0,range:15.0,shadows_enabled:false,..default()},Transform::from_xyz(x,2.2,z)));
+        commands.spawn((PointLight{color:rgb(0xffe6a8),intensity:520.0,range:15.0,shadows_enabled:false,..default()},Transform::from_xyz(x,2.2,z)));
     }
 
     let orbit=CameraOrbit::default();
@@ -105,15 +104,16 @@ fn interface(mut contexts:EguiContexts,mut life:ResMut<Life>,camera:Single<(&Cam
     }
 
     let Life{game,avatar,society,haunting,..}=&mut *life;
-    let _=ui::draw(ctx,game,avatar);
-    if !society.residents.is_empty(){ui::draw_social(ctx,game,society);}
-    mspa_ui::draw(ctx,game,society,&avatar.name);
-    if let Some(power)=haunting_ui::draw(ctx,haunting){
+    if let Some(power)=compact_ui::draw(ctx,game,avatar,society,haunting){
         haunting.invoke(power,game,society,avatar.character);
     }
 
-    let frame=&game.frame;let rotation=Quat::from_euler(EulerRot::XYZ,frame.rotation[0]as f32,frame.rotation[1]as f32,frame.rotation[2]as f32);let head=Vec3::new(frame.position.x as f32,frame.position.y as f32,frame.position.z as f32)+rotation*Vec3::new(0.0,1.5,0.0);let(camera,transform)=*camera;
-    if let Ok(position)=camera.world_to_viewport(transform,head){let size=camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);let screen=ctx.content_rect();ui::draw_reaction(ctx,game,[screen.left()+position.x*screen.width()/size.x,screen.top()+position.y*screen.height()/size.y]);}
+    // Speech no longer occupies the centre permanently. It appears only while
+    // walking, using something or actively talking.
+    if game.phase!=game::Phase::Idle||game.talking{
+        let frame=&game.frame;let rotation=Quat::from_euler(EulerRot::XYZ,frame.rotation[0]as f32,frame.rotation[1]as f32,frame.rotation[2]as f32);let head=Vec3::new(frame.position.x as f32,frame.position.y as f32,frame.position.z as f32)+rotation*Vec3::new(0.0,1.5,0.0);let(camera,transform)=*camera;
+        if let Ok(position)=camera.world_to_viewport(transform,head){let size=camera.logical_viewport_size().unwrap_or(Vec2::ONE).max(Vec2::ONE);let screen=ctx.content_rect();ui::draw_reaction(ctx,game,[screen.left()+position.x*screen.width()/size.x,screen.top()+position.y*screen.height()/size.y]);}
+    }
     Ok(())
 }
 fn configure_interface(mut contexts:EguiContexts,mut configured:Local<bool>){if !*configured&&let Ok(ctx)=contexts.ctx_mut(){ui::configure(ctx);*configured=true;}}
