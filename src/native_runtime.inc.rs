@@ -24,8 +24,6 @@ fn perceive_world(mut life:ResMut<Life>,mut awareness:Local<perception::WorldAwa
 fn tag_cutaway_parts(mut commands:Commands,names:Query<(Entity,&Name),Added<Name>>){
     for(entity,name)in &names{
         let s=name.as_str();
-        // These three meshes occupy the top of the imported Backroom and are the
-        // ceiling/roof layers that hide the interior from the isometric camera.
         let side=if s.starts_with("CUTAWAY_ROOF__")
             ||s=="Backroom_lambert5_0"
             ||s=="Backroom_lambert6_0"
@@ -35,24 +33,53 @@ fn tag_cutaway_parts(mut commands:Commands,names:Query<(Entity,&Name),Added<Name
     }
 }
 
-fn find_character_root(mut entity:Entity,parents:&Query<&ChildOf>,roots:&Query<&CharacterRoot>)->Option<usize>{
-    loop{if let Ok(root)=roots.get(entity){return Some(root.profile_index);}entity=parents.get(entity).ok()?.parent();}
+fn find_character_root(mut entity:Entity,parents:&Query<&ChildOf>,roots:&Query<(&CharacterRoot,&CharacterSource)>)->Option<(usize,Handle<Gltf>)>{
+    loop{
+        if let Ok((root,source))=roots.get(entity){return Some((root.profile_index,source.0.clone()));}
+        entity=parents.get(entity).ok()?.parent();
+    }
+}
+
+fn named_animation(gltf:&Gltf,keywords:&[&str])->Option<Handle<AnimationClip>>{
+    for keyword in keywords{
+        for(name,clip)in &gltf.named_animations{
+            let normalized=name.to_ascii_lowercase().replace(['-','_','.'],' ');
+            if normalized.split_whitespace().any(|part|part==*keyword)||normalized.contains(keyword){
+                return Some(clip.clone());
+            }
+        }
+    }
+    None
 }
 
 fn setup_character_animations(
-    mut commands:Commands,asset_server:Res<AssetServer>,mut graphs:ResMut<Assets<AnimationGraph>>,
-    parents:Query<&ChildOf>,roots:Query<&CharacterRoot>,mut players:Query<(Entity,&mut AnimationPlayer),Added<AnimationPlayer>>,
+    mut commands:Commands,mut graphs:ResMut<Assets<AnimationGraph>>,gltfs:Res<Assets<Gltf>>,
+    parents:Query<&ChildOf>,roots:Query<(&CharacterRoot,&CharacterSource)>,mut players:Query<(Entity,&mut AnimationPlayer),Added<AnimationPlayer>>,
 ){
     for(entity,mut player)in &mut players{
-        let Some(profile)=find_character_root(entity,&parents,&roots)else{continue;};
+        let Some((profile,source))=find_character_root(entity,&parents,&roots)else{continue;};
+        let Some(gltf)=gltfs.get(&source)else{continue;};
         let spec=character_catalog::character(profile);
-        if spec.idle_animation.is_none()&&spec.walk_animation.is_none(){continue;}
+
+        // Prefer the actual names authored in each GLB. Numeric indices remain only as
+        // compatibility fallbacks for assets whose clips are unnamed.
+        let idle_clip=named_animation(gltf,&["idle","standing","stand","breath","breathing","wait"])
+            .or_else(||spec.idle_animation.and_then(|i|gltf.animations.get(i).cloned()))
+            .or_else(||gltf.animations.first().cloned());
+        let walk_clip=named_animation(gltf,&["walk","walking","locomotion","stroll"])
+            .or_else(||spec.walk_animation.and_then(|i|gltf.animations.get(i).cloned()));
+
+        if idle_clip.is_none()&&walk_clip.is_none(){
+            warn!("Character {} has no skeletal animation clips; locomotion will be disabled for this model",spec.name);
+            continue;
+        }
+
         let mut graph=AnimationGraph::new();
-        let idle=spec.idle_animation.map(|i|graph.add_clip(asset_server.load(GltfAssetLabel::Animation(i).from_asset(spec.asset)),1.0,graph.root));
-        let walk=spec.walk_animation.map(|i|graph.add_clip(asset_server.load(GltfAssetLabel::Animation(i).from_asset(spec.asset)),1.0,graph.root));
+        let idle=idle_clip.map(|clip|graph.add_clip(clip,1.0,graph.root));
+        let walk=walk_clip.map(|clip|graph.add_clip(clip,1.0,graph.root));
         let handle=graphs.add(graph);
         commands.entity(entity).insert((AnimationGraphHandle(handle),CharacterAnimation{profile_index:profile,idle,walk,walking:false}));
-        if let Some(node)=idle{player.play(node).repeat();}
+        if let Some(node)=idle.or(walk){player.play(node).repeat();}
     }
 }
 
@@ -72,7 +99,6 @@ fn rotate_camera(
     let offset=Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
     **camera=Transform::from_translation(focus+offset).looking_at(focus,Vec3::Y);
 
-    // Real centred footprint of the supplied GLB after its root translation.
     let indoors=(-23.45..=23.45).contains(&p.x)&&(-27.51..=27.51).contains(&p.z);
     let sx=offset.x.signum();let sz=offset.z.signum();
     for(part,mut visibility)in &mut cutaway{
@@ -98,11 +124,10 @@ fn animate(
         let spec=character_catalog::character(root.profile_index);
         let frame=if root.profile_index==life.avatar.character{Some(&life.game.frame)}else{life.society.residents.iter().find(|r|r.profile_index==root.profile_index).map(|r|&r.frame)};
         let Some(frame)=frame else{continue;};
-        let moving=if root.profile_index==life.avatar.character{life.game.phase==game::Phase::Walking}else{life.society.residents.iter().find(|r|r.profile_index==root.profile_index).is_some_and(|r|r.action.starts_with("Paseando"))};
-        let bob=if spec.walk_animation.is_none()&&moving{(life.game.game_time as f32*8.0).sin().abs()*0.015}else{0.0};
-        transform.translation=Vec3::new(frame.position.x as f32,frame.position.y as f32+spec.vertical_offset+bob,frame.position.z as f32);
+        transform.translation=Vec3::new(frame.position.x as f32,frame.position.y as f32+spec.vertical_offset,frame.position.z as f32);
         let pose=Quat::from_euler(EulerRot::XYZ,frame.rotation[0]as f32,frame.rotation[1]as f32,frame.rotation[2]as f32);
-        transform.rotation=pose*Quat::from_rotation_x(spec.rotation_x);
+        let authored_forward=Quat::from_rotation_y(spec.forward_yaw)*Quat::from_rotation_x(spec.rotation_x);
+        transform.rotation=pose*authored_forward;
         transform.scale=Vec3::splat(spec.scale);
     }
     for(mut player,mut controller)in &mut players{
