@@ -1,57 +1,60 @@
 use std::{fs, path::{Path, PathBuf}};
 
-const HOUSE_ASSET_BYTES: usize = 1_110_456;
+const HOUSE_ASSET_BYTES: u64 = 1_110_456;
+const HOUSE_NAMES: [&str; 3] = ["psx_-_backroom.glb", "psx-backroom.glb", "house.glb"];
 
-fn decode_base64(input: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(input.len() * 3 / 4);
-    let mut acc = 0u32;
-    let mut bits = 0u32;
-    for byte in input.bytes() {
-        let value = match byte {
-            b'A'..=b'Z' => byte - b'A',
-            b'a'..=b'z' => byte - b'a' + 26,
-            b'0'..=b'9' => byte - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' => break,
-            b'\r' | b'\n' | b' ' | b'\t' => continue,
-            _ => panic!("invalid base64 byte in house asset source"),
-        } as u32;
-        acc = (acc << 6) | value;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            out.push(((acc >> bits) & 0xff) as u8);
-        }
-    }
-    out
+fn valid_house_asset(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else { return false; };
+    if metadata.len() != HOUSE_ASSET_BYTES { return false; }
+    let Ok(bytes) = fs::read(path) else { return false; };
+    bytes.starts_with(b"glTF")
 }
 
-fn materialize_house_asset() {
-    let source_dir = Path::new("assets/house/source");
+fn house_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(explicit) = std::env::var("MENS_LIFE_HOUSE_GLB") {
+        candidates.push(PathBuf::from(explicit));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        for name in HOUSE_NAMES { candidates.push(cwd.join(name)); }
+    }
+    for home_key in ["USERPROFILE", "HOME"] {
+        if let Ok(home) = std::env::var(home_key) {
+            let home = PathBuf::from(home);
+            for directory in ["Downloads", "Desktop"] {
+                for name in HOUSE_NAMES {
+                    candidates.push(home.join(directory).join(name));
+                }
+            }
+        }
+    }
+    candidates
+}
+
+fn install_house_asset() {
     let target = Path::new("assets/house/house.glb");
-    println!("cargo:rerun-if-changed={}", source_dir.display());
+    println!("cargo:rerun-if-env-changed=MENS_LIFE_HOUSE_GLB");
 
-    let mut chunks = fs::read_dir(source_dir)
-        .expect("PSX Backroom source chunks missing")
-        .map(|entry| entry.expect("Cannot read house asset source").path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "b64"))
-        .collect::<Vec<PathBuf>>();
-    chunks.sort();
-    assert!(!chunks.is_empty(), "PSX Backroom source chunks missing");
+    if valid_house_asset(target) {
+        println!("cargo:rerun-if-changed={}", target.display());
+        return;
+    }
+    if target.exists() {
+        let _ = fs::remove_file(target);
+    }
 
-    let mut encoded = String::new();
-    for path in chunks {
-        println!("cargo:rerun-if-changed={}", path.display());
-        encoded.push_str(&fs::read_to_string(&path).expect("Cannot read house asset chunk"));
+    for source in house_candidates() {
+        println!("cargo:rerun-if-changed={}", source.display());
+        if !valid_house_asset(&source) { continue; }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).expect("Cannot create assets/house");
+        }
+        fs::copy(&source, target).expect("Cannot install PSX Backroom house asset");
+        println!("cargo:warning=Installed PSX Backroom from {}", source.display());
+        return;
     }
-    let decoded = decode_base64(&encoded);
-    assert_eq!(decoded.len(), HOUSE_ASSET_BYTES, "PSX Backroom asset size mismatch");
-    assert!(decoded.starts_with(b"glTF"), "PSX Backroom asset is not a GLB");
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent).expect("Cannot create house asset directory");
-    }
-    fs::write(target, decoded).expect("Cannot materialize PSX Backroom house asset");
+
+    println!("cargo:warning=PSX Backroom not found. Put psx_-_backroom.glb in the repo root, Downloads, Desktop, or set MENS_LIFE_HOUSE_GLB.");
 }
 
 fn sources(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
@@ -66,7 +69,7 @@ fn sources(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
 }
 
 fn main() {
-    materialize_house_asset();
+    install_house_asset();
     println!("cargo:rerun-if-changed=vendor/MSPA-Lib/include");
     println!("cargo:rerun-if-changed=vendor/MSPA-Lib/src");
     println!("cargo:rerun-if-changed=native/mspa_bridge.h");
