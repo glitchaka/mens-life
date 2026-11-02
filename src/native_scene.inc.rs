@@ -30,21 +30,21 @@ fn setup(
     mut life:ResMut<Life>,
     capture:Res<Capture>,
 ){
-    // The supplied PSX Backroom is authored in large source units. 0.1 gives it a
-    // usable ~27 x 32 metre footprint and ~2.3 metre ceiling. Translation centres
-    // the room at the simulation origin and places its carpet/floor at Y = 0.
+    // The GLB already contains the Sketchfab/FBX conversion transforms.
+    // Its final world bounds are about 46.90 x 55.01 metres with floor at Y=-1.246.
+    // Keep scale 1:1, centre X/Z on the simulation origin and place the floor at Y=0.
     commands.spawn((
         gltf_asset(&asset_server,"house/house.glb"),
         Name::new("PsxBackroomHouse"),
         Transform{
-            translation:Vec3::new(-1.86438,0.196013,11.92789),
+            translation:Vec3::new(-3.1958754,1.2461756,20.44654),
             rotation:Quat::IDENTITY,
-            scale:Vec3::splat(0.1),
+            scale:Vec3::ONE,
         },
     ));
 
-    // Visible furnishings come from the GLB. Existing gameplay furniture remains
-    // as invisible interaction proxies only.
+    // Visible architecture and furnishings come from the GLB. Existing gameplay
+    // geometry remains invisible and only provides interaction/navigation proxies.
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
         if !spec.available{continue;}
         let p=if profile_index==life.avatar.character{life.game.frame.position}else{life.society.residents.iter().find(|r|r.profile_index==profile_index).map(|r|r.frame.position).unwrap_or(Point::new(spec.outdoor_spawn[0],0.0,spec.outdoor_spawn[2]))};
@@ -72,15 +72,17 @@ fn setup(
         let entity=entity.id();entities.insert(id.into(),entity);
     }
 
-    commands.spawn((DirectionalLight{color:rgb(0xfff0cf),illuminance:2.2,shadows_enabled:true,shadow_depth_bias:0.02,shadow_normal_bias:1.8,..default()},CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:55.0,..default()}.build(),Transform::from_xyz(-8.0,20.0,11.0).looking_at(Vec3::ZERO,Vec3::Y)));
-    for [x,z] in [[0.0,0.0],[-8.0,-8.0],[8.0,-8.0],[-8.0,8.0],[8.0,8.0]]{
-        commands.spawn((PointLight{color:rgb(0xffe6a8),intensity:900.0,range:11.0,shadows_enabled:false,..default()},Transform::from_xyz(x,2.15,z)));
+    // The source textures already carry the PSX look; lights only make the room readable.
+    commands.spawn((DirectionalLight{color:rgb(0xfff0cf),illuminance:1.7,shadows_enabled:true,shadow_depth_bias:0.02,shadow_normal_bias:1.8,..default()},CascadeShadowConfigBuilder{num_cascades:1,minimum_distance:0.1,maximum_distance:70.0,..default()}.build(),Transform::from_xyz(-12.0,24.0,14.0).looking_at(Vec3::ZERO,Vec3::Y)));
+    for [x,z] in [[0.0,0.0],[-12.0,-12.0],[12.0,-12.0],[-12.0,12.0],[12.0,12.0]]{
+        commands.spawn((PointLight{color:rgb(0xffe6a8),intensity:1050.0,range:15.0,shadows_enabled:false,..default()},Transform::from_xyz(x,2.2,z)));
     }
+
     let orbit=CameraOrbit::default();
     let p=life.game.ground_position;
-    let focus=Vec3::new(p.x as f32,0.8,p.z as f32);
+    let focus=Vec3::new(p.x as f32,0.9,p.z as f32);
     let camera_pos=focus+Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
-    commands.spawn((CameraRig,Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:120.0,scaling_mode:ScalingMode::AutoMin{min_width:18.0,min_height:11.25},..OrthographicProjection::default_3d()}),Transform::from_translation(camera_pos).looking_at(focus,Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:35.0,end:60.0},..default()}));
+    commands.spawn((CameraRig,Camera3d::default(),Projection::Orthographic(OrthographicProjection{near:0.1,far:160.0,scaling_mode:ScalingMode::AutoMin{min_width:16.0,min_height:10.0},..OrthographicProjection::default_3d()}),Transform::from_translation(camera_pos).looking_at(focus,Vec3::Y),Exposure{ev100:0.0},Tonemapping::None,Msaa::Sample4,ShadowFilteringMethod::Gaussian,DistanceFog{color:rgb(0x9ec7d0),directional_light_color:Color::NONE,falloff:FogFalloff::Linear{start:45.0,end:85.0},..default()}));
 
     if let Some(task)=capture.task{life.game.command(task);}
     for i in 0..capture.simulate{
