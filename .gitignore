@@ -8,5 +8,6 @@
 /.codex/
 /outputs/
 /work/
+/assets/house/house.glb
 *.log
 .env*
