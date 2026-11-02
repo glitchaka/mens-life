@@ -24,9 +24,12 @@ fn perceive_world(mut life:ResMut<Life>,mut awareness:Local<perception::WorldAwa
 fn tag_cutaway_parts(mut commands:Commands,names:Query<(Entity,&Name),Added<Name>>){
     for(entity,name)in &names{
         let s=name.as_str();
+        // These three meshes occupy the top of the imported Backroom and are the
+        // ceiling/roof layers that hide the interior from the isometric camera.
         let side=if s.starts_with("CUTAWAY_ROOF__")
-            ||s=="Backroom_lambert7_0"
+            ||s=="Backroom_lambert5_0"
             ||s=="Backroom_lambert6_0"
+            ||s=="Backroom_lambert7_0"
         {Some(CutawaySide::Roof)}else if s.starts_with("CUTAWAY_EAST__"){Some(CutawaySide::East)}else if s.starts_with("CUTAWAY_WEST__"){Some(CutawaySide::West)}else if s.starts_with("CUTAWAY_NORTH__"){Some(CutawaySide::North)}else if s.starts_with("CUTAWAY_SOUTH__"){Some(CutawaySide::South)}else{None};
         if let Some(side)=side{commands.entity(entity).insert(CutawayPart(side));}
     }
@@ -65,11 +68,12 @@ fn rotate_camera(
     orbit.yaw=(orbit.yaw+delta).rem_euclid(std::f32::consts::TAU);
 
     let p=life.game.ground_position;
-    let focus=Vec3::new(p.x as f32,0.8,p.z as f32);
+    let focus=Vec3::new(p.x as f32,0.9,p.z as f32);
     let offset=Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
     **camera=Transform::from_translation(focus+offset).looking_at(focus,Vec3::Y);
 
-    let indoors=(-13.68..=13.68).contains(&p.x)&&(-16.04..=16.04).contains(&p.z);
+    // Real centred footprint of the supplied GLB after its root translation.
+    let indoors=(-23.45..=23.45).contains(&p.x)&&(-27.51..=27.51).contains(&p.z);
     let sx=offset.x.signum();let sz=offset.z.signum();
     for(part,mut visibility)in &mut cutaway{
         let hide=indoors&&match part.0{
@@ -127,7 +131,7 @@ fn animate(
     for mut light in &mut point_lights{
         let wave=((life.game.game_time*31.0).sin()*0.5+0.5)as f32;
         let factor=if haunting_light{0.18+wave*0.82}else{1.0};
-        light.intensity=900.0*factor;
+        light.intensity=1050.0*factor;
         light.color=if haunting_light&&life.haunting.level>=11{rgb(0xc9e8ee)}else{rgb(0xffe6a8)};
     }
     let tv_active=life.game.frame.watching||life.poltergeist.active(Task::Tv);
