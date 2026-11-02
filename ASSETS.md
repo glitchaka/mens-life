@@ -24,6 +24,15 @@ The standing pink-shirt/blue-jeans reference character is deliberately not liste
 
 `assets/house/house.glb` is the supplied PSX Backroom model by Kasuga. The runtime keeps its original mesh, UVs, materials and textures. It is transformed as one scene root with a uniform `0.1` world scale, centred around the simulation origin, and its carpet/floor plane is aligned to `Y = 0`.
 
+The raw GLB is intentionally not rehosted by this public repository. During a local build, `build.rs` validates the exact supplied asset (1,110,456 bytes and GLB header) and automatically installs it from the first valid location found among:
+
+- `MENS_LIFE_HOUSE_GLB`
+- the repository root
+- the user's `Downloads` directory
+- the user's `Desktop` directory
+
+Accepted local filenames are `psx_-_backroom.glb`, `psx-backroom.glb`, and `house.glb`.
+
 The model itself is the visible architecture. The old Two Stories / Autumn House shell is no longer rendered. Gameplay furniture and house boundaries remain lightweight invisible interaction/navigation proxies only.
 
 Character and furniture geometry, skinning and animation data are preserved. Asset sizing is handled by scene transforms. Large embedded textures may be resized for runtime memory use without decimating meshes, changing UVs, removing bones or stripping animation clips.
