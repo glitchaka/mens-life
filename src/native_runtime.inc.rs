@@ -52,6 +52,42 @@ fn named_animation(gltf:&Gltf,keywords:&[&str])->Option<Handle<AnimationClip>>{
     None
 }
 
+fn bone_side(name:&str)->Option<bool>{
+    let n=name.to_ascii_lowercase();
+    let left=n.contains(".l")||n.contains("_l")||n.contains("left");
+    let right=n.contains(".r")||n.contains("_r")||n.contains("right");
+    match(left,right){(true,false)=>Some(true),(false,true)=>Some(false),_=>None}
+}
+
+fn procedural_bone_kind(name:&str)->Option<ProceduralBoneKind>{
+    let n=name.to_ascii_lowercase();
+    let left=bone_side(&n)?;
+    let lower_leg=n.contains("shin")||n.contains("lower_leg")||n.contains("lowerleg")||n.contains("calf");
+    let upper_leg=(n.contains("thigh")||n.contains("upper_leg")||n.contains("upperleg")||n.contains("upleg")||n.contains("leg."))&&!lower_leg&&!n.contains("foot")&&!n.contains("toe");
+    let lower_arm=n.contains("forearm")||n.contains("lower_arm")||n.contains("lowerarm");
+    let upper_arm=(n.contains("upper_arm")||n.contains("upperarm")||n.contains("arm."))&&!lower_arm&&!n.contains("hand")&&!n.contains("finger");
+    if upper_leg{return Some(if left{ProceduralBoneKind::UpperLegL}else{ProceduralBoneKind::UpperLegR});}
+    if lower_leg{return Some(if left{ProceduralBoneKind::LowerLegL}else{ProceduralBoneKind::LowerLegR});}
+    if upper_arm{return Some(if left{ProceduralBoneKind::UpperArmL}else{ProceduralBoneKind::UpperArmR});}
+    if lower_arm{return Some(if left{ProceduralBoneKind::LowerArmL}else{ProceduralBoneKind::LowerArmR});}
+    None
+}
+
+fn tag_procedural_bones(
+    mut commands:Commands,
+    names:Query<(Entity,&Name,&Transform),Added<Name>>,
+    parents:Query<&ChildOf>,
+    roots:Query<(&CharacterRoot,&CharacterSource)>,
+){
+    for(entity,name,transform)in &names{
+        let Some((profile,_))=find_character_root(entity,&parents,&roots)else{continue;};
+        if !character_catalog::character(profile).procedural_walk{continue;}
+        if let Some(kind)=procedural_bone_kind(name.as_str()){
+            commands.entity(entity).insert(ProceduralBone{profile_index:profile,kind,rest:transform.rotation});
+        }
+    }
+}
+
 fn setup_character_animations(
     mut commands:Commands,mut graphs:ResMut<Assets<AnimationGraph>>,gltfs:Res<Assets<Gltf>>,
     parents:Query<&ChildOf>,roots:Query<(&CharacterRoot,&CharacterSource)>,mut players:Query<(Entity,&mut AnimationPlayer),Added<AnimationPlayer>>,
@@ -60,20 +96,12 @@ fn setup_character_animations(
         let Some((profile,source))=find_character_root(entity,&parents,&roots)else{continue;};
         let Some(gltf)=gltfs.get(&source)else{continue;};
         let spec=character_catalog::character(profile);
-
-        // Prefer the actual names authored in each GLB. Numeric indices remain only as
-        // compatibility fallbacks for assets whose clips are unnamed.
-        let idle_clip=named_animation(gltf,&["idle","standing","stand","breath","breathing","wait"])
+        let idle_clip=named_animation(gltf,&["standby","idle","standing","stand","breath","breathing","wait"])
             .or_else(||spec.idle_animation.and_then(|i|gltf.animations.get(i).cloned()))
             .or_else(||gltf.animations.first().cloned());
-        let walk_clip=named_animation(gltf,&["walk","walking","locomotion","stroll"])
+        let walk_clip=named_animation(gltf,&["step","walk","walking","locomotion","stroll"])
             .or_else(||spec.walk_animation.and_then(|i|gltf.animations.get(i).cloned()));
-
-        if idle_clip.is_none()&&walk_clip.is_none(){
-            warn!("Character {} has no skeletal animation clips; locomotion will be disabled for this model",spec.name);
-            continue;
-        }
-
+        if idle_clip.is_none()&&walk_clip.is_none(){continue;}
         let mut graph=AnimationGraph::new();
         let idle=idle_clip.map(|clip|graph.add_clip(clip,1.0,graph.root));
         let walk=walk_clip.map(|clip|graph.add_clip(clip,1.0,graph.root));
@@ -113,6 +141,11 @@ fn rotate_camera(
     }
 }
 
+fn character_is_moving(life:&Life,profile:usize)->bool{
+    if profile==life.avatar.character{life.game.phase==game::Phase::Walking}
+    else{life.society.residents.iter().find(|r|r.profile_index==profile).is_some_and(|r|r.action.starts_with("Paseando")&&!r.path.is_empty())}
+}
+
 fn animate(
     life:Res<Life>,shared:Res<Materials>,mut materials:ResMut<Assets<StandardMaterial>>,
     mut roots:Query<(&CharacterRoot,&mut Transform)>,
@@ -131,12 +164,22 @@ fn animate(
         transform.scale=Vec3::splat(spec.scale);
     }
     for(mut player,mut controller)in &mut players{
-        let moving=if controller.profile_index==life.avatar.character{life.game.phase==game::Phase::Walking}else{life.society.residents.iter().find(|r|r.profile_index==controller.profile_index).is_some_and(|r|r.action.starts_with("Paseando"))};
-        let wants_walk=moving&&controller.walk.is_some();
-        if wants_walk!=controller.walking{
-            controller.walking=wants_walk;player.stop_all();
-            if let Some(node)=if wants_walk{controller.walk}else{controller.idle.or(controller.walk)}{player.play(node).repeat();}
-        }else if player.all_finished(){if let Some(node)=if wants_walk{controller.walk}else{controller.idle.or(controller.walk)}{player.play(node).repeat();}}
+        let moving=character_is_moving(&life,controller.profile_index);
+        let spec=character_catalog::character(controller.profile_index);
+        let authored_walk=moving&&controller.walk.is_some();
+        let procedural=moving&&controller.walk.is_none()&&spec.procedural_walk;
+        let locomoting=authored_walk||procedural;
+        if locomoting!=controller.walking{
+            controller.walking=locomoting;
+            player.stop_all();
+            if authored_walk{
+                if let Some(node)=controller.walk{player.play(node).repeat();}
+            }else if !moving{
+                if let Some(node)=controller.idle.or(controller.walk){player.play(node).repeat();}
+            }
+        }else if !locomoting&&player.all_finished(){
+            if let Some(node)=controller.idle.or(controller.walk){player.play(node).repeat();}
+        }
     }
     for(id,mut t,mut v)in &mut nodes{
         match id.0.as_str(){
@@ -161,4 +204,31 @@ fn animate(
     }
     let tv_active=life.game.frame.watching||life.poltergeist.active(Task::Tv);
     if let Some(mat)=shared.0.get("tv-screen").and_then(|h|materials.get_mut(h)){mat.base_color=rgb(if tv_active{0x79a7d3}else{0x17212b});mat.emissive=Color::hsl(life.game.frame.screen_hue as f32*360.0,0.4,if tv_active{0.4}else{0.03}).to_linear();}
+}
+
+fn procedural_gait(life:Res<Life>,mut bones:Query<(&ProceduralBone,&mut Transform)>){
+    for(bone,mut transform)in &mut bones{
+        if !character_is_moving(&life,bone.profile_index){continue;}
+        let frame=if bone.profile_index==life.avatar.character{&life.game.frame}else{
+            let Some(resident)=life.society.residents.iter().find(|r|r.profile_index==bone.profile_index)else{continue;};
+            &resident.frame
+        };
+        let(left,index)=match bone.kind{
+            ProceduralBoneKind::UpperLegL|ProceduralBoneKind::LowerLegL|ProceduralBoneKind::UpperArmL|ProceduralBoneKind::LowerArmL=>(true,0),
+            _=>(false,1),
+        };
+        let leg=frame.legs[index]as f32;
+        let knee=frame.knees[index]as f32;
+        let arm=frame.arms[index]as f32;
+        let elbow=frame.elbows[index]as f32;
+        transform.rotation=match bone.kind{
+            ProceduralBoneKind::UpperLegL|ProceduralBoneKind::UpperLegR=>bone.rest*Quat::from_rotation_x(leg),
+            ProceduralBoneKind::LowerLegL|ProceduralBoneKind::LowerLegR=>bone.rest*Quat::from_rotation_x(-knee*0.72),
+            ProceduralBoneKind::UpperArmL|ProceduralBoneKind::UpperArmR=>{
+                let down=Quat::from_rotation_z(if left{-1.15}else{1.15});
+                bone.rest*down*Quat::from_rotation_x(arm)
+            },
+            ProceduralBoneKind::LowerArmL|ProceduralBoneKind::LowerArmR=>bone.rest*Quat::from_rotation_x(-elbow*0.55),
+        };
+    }
 }
