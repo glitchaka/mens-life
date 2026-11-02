@@ -17,8 +17,12 @@ pub struct CharacterSpec {
     pub asset: &'static str,
     pub available: bool,
     pub scale: f32,
+    /// Extra source-model correction only. glTF already converts coordinate axes.
     pub rotation_x: f32,
+    /// Yaw correction from the model's authored forward axis to the simulation's +Z forward.
+    pub forward_yaw: f32,
     pub vertical_offset: f32,
+    /// Legacy fallbacks for unnamed GLB clips. Runtime prefers named idle/walk clips.
     pub idle_animation: Option<usize>,
     pub walk_animation: Option<usize>,
     pub personality: [f32; 6],
@@ -30,12 +34,14 @@ pub struct CharacterSpec {
 // reference. It is intentionally unavailable until its actual 3D file is supplied;
 // the rejected kneeling OBJ is never substituted for it.
 pub const CHARACTERS: [CharacterSpec; 6] = [
-    CharacterSpec { key: "original", name: "Aiko", asset: "characters/original_girl.glb", available: false, scale: 1.0, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.70, 0.72, 0.80, 0.58, 0.74, 0.54], voice: Voice::Gentle, outdoor_spawn: [3.8, 0.0, 4.6] },
-    CharacterSpec { key: "mia", name: "Mia", asset: "anime_girl_mia_ter_excited_preview.glb", available: true, scale: 1.02, rotation_x: std::f32::consts::FRAC_PI_2, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: None, personality: [0.86, 0.54, 0.64, 0.46, 0.86, 0.82], voice: Voice::Excitable, outdoor_spawn: [5.0, 0.0, -3.6] },
-    CharacterSpec { key: "kurumi", name: "Kurumi", asset: "kurumi_schoolgirl_-_bourin.glb", available: true, scale: 0.465, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.78, 0.38, 0.34, 0.64, 0.58, 0.90], voice: Voice::SharpSchoolgirl, outdoor_spawn: [1.6, 0.0, -5.0] },
-    CharacterSpec { key: "mai", name: "Mai", asset: "mai_maid_-bourin.glb", available: true, scale: 0.476, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.56, 0.84, 0.84, 0.74, 0.54, 0.40], voice: Voice::Reserved, outdoor_spawn: [-5.2, 0.0, -4.5] },
-    CharacterSpec { key: "outfits", name: "Rin", asset: "rigged_anime_girl_outfits__facial_expressions.glb", available: true, scale: 0.0147, rotation_x: 0.0, vertical_offset: 0.78, idle_animation: Some(0), walk_animation: None, personality: [0.66, 0.62, 0.56, 0.66, 0.78, 0.62], voice: Voice::Playful, outdoor_spawn: [-5.2, 0.0, 4.5] },
-    CharacterSpec { key: "schoolgirl_sweet", name: "Yui", asset: "3d_anime_girl..glb", available: true, scale: 0.89, rotation_x: 0.0, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.86, 0.56, 0.88, 0.48, 0.72, 0.74], voice: Voice::SweetSchoolgirl, outdoor_spawn: [5.4, 0.0, 2.2] },
+    CharacterSpec { key: "original", name: "Aiko", asset: "characters/original_girl.glb", available: false, scale: 1.0, rotation_x: 0.0, forward_yaw: 0.0, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.70, 0.72, 0.80, 0.58, 0.74, 0.54], voice: Voice::Gentle, outdoor_spawn: [3.8, 0.0, 4.6] },
+    // Bevy's glTF loader already performs the glTF coordinate conversion. The old +90° X
+    // correction laid Mia on her side, so it must stay zero here.
+    CharacterSpec { key: "mia", name: "Mia", asset: "anime_girl_mia_ter_excited_preview.glb", available: true, scale: 1.02, rotation_x: 0.0, forward_yaw: std::f32::consts::PI, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: None, personality: [0.86, 0.54, 0.64, 0.46, 0.86, 0.82], voice: Voice::Excitable, outdoor_spawn: [5.0, 0.0, -3.6] },
+    CharacterSpec { key: "kurumi", name: "Kurumi", asset: "kurumi_schoolgirl_-_bourin.glb", available: true, scale: 0.465, rotation_x: 0.0, forward_yaw: std::f32::consts::PI, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.78, 0.38, 0.34, 0.64, 0.58, 0.90], voice: Voice::SharpSchoolgirl, outdoor_spawn: [1.6, 0.0, -5.0] },
+    CharacterSpec { key: "mai", name: "Mai", asset: "mai_maid_-bourin.glb", available: true, scale: 0.476, rotation_x: 0.0, forward_yaw: std::f32::consts::PI, vertical_offset: 0.0, idle_animation: Some(0), walk_animation: Some(9), personality: [0.56, 0.84, 0.84, 0.74, 0.54, 0.40], voice: Voice::Reserved, outdoor_spawn: [-5.2, 0.0, -4.5] },
+    CharacterSpec { key: "outfits", name: "Rin", asset: "rigged_anime_girl_outfits__facial_expressions.glb", available: true, scale: 0.0147, rotation_x: 0.0, forward_yaw: std::f32::consts::PI, vertical_offset: 0.78, idle_animation: Some(0), walk_animation: None, personality: [0.66, 0.62, 0.56, 0.66, 0.78, 0.62], voice: Voice::Playful, outdoor_spawn: [-5.2, 0.0, 4.5] },
+    CharacterSpec { key: "schoolgirl_sweet", name: "Yui", asset: "3d_anime_girl..glb", available: true, scale: 0.89, rotation_x: 0.0, forward_yaw: std::f32::consts::PI, vertical_offset: 0.0, idle_animation: None, walk_animation: None, personality: [0.86, 0.56, 0.88, 0.48, 0.72, 0.74], voice: Voice::SweetSchoolgirl, outdoor_spawn: [5.4, 0.0, 2.2] },
 ];
 
 pub fn character(index: usize) -> &'static CharacterSpec {
