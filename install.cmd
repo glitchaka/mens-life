@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
-set "BUILD_LOG=%TEMP%\mens-life-build.log"
+set "BUILD_LOG=%~dp0mens-life-build.log"
 if exist "%BUILD_LOG%" del /Q "%BUILD_LOG%" >nul 2>&1
 
 echo [mens-life] Revisando actualizaciones...
