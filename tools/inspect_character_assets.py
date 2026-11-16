@@ -60,9 +60,9 @@ for name in ASSETS:
             length = view.get("byteLength", 0)
             raw = bytes(binary[start:start+length])
             width = height = 0
-            if raw.startswith(b"\\x89PNG\\r\\n\\x1a\\n") and len(raw) >= 24:
+            if raw.startswith(bytes([137,80,78,71,13,10,26,10])) and len(raw) >= 24:
                 width, height = struct.unpack_from(">II", raw, 16)
-            elif raw.startswith(b"\\xff\\xd8"):
+            elif raw.startswith(bytes([255,216])):
                 pos = 2
                 while pos + 4 < len(raw):
                     if raw[pos] != 0xFF:
