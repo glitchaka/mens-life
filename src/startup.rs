@@ -1,9 +1,23 @@
 //! Fatal startup errors must remain visible in the Windows GUI executable.
-use std::{backtrace::Backtrace, fs, sync::atomic::{AtomicBool, Ordering}};
+use std::{backtrace::Backtrace, fs, io::Write, sync::atomic::{AtomicBool, Ordering}, time::{SystemTime, UNIX_EPOCH}};
 
 static REPORTED: AtomicBool = AtomicBool::new(false);
 
+/// Records lifecycle checkpoints even when a native/graphics failure bypasses Rust's panic hook.
+pub fn checkpoint(event: &str) {
+    let Some(dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_owned())) else { return; };
+    let path = dir.join("last-run.txt");
+    let mut opts = fs::OpenOptions::new();
+    opts.create(true).write(true);
+    if event == "Iniciando" { opts.truncate(true); } else { opts.append(true); }
+    if let Ok(mut file) = opts.open(path) {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let _ = writeln!(file, "[{now}] pid={} {event}", std::process::id());
+    }
+}
+
 pub fn install() {
+    checkpoint("Iniciando");
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let thread = std::thread::current();
@@ -12,12 +26,14 @@ pub fn install() {
             env!("CARGO_PKG_VERSION"), thread.name().unwrap_or("unnamed"),
             std::env::current_exe(), std::env::current_dir(), info, Backtrace::force_capture(),
         );
+        checkpoint("Pánico de Rust");
         report(&details);
         previous(info);
     }));
 }
 
 pub fn report(details: &str) {
+    checkpoint("Error fatal");
     if REPORTED.swap(true, Ordering::SeqCst) { return; }
     // Keep reports inside the installation, independently of the launch directory.
     // If that directory is not writable, show the error without writing elsewhere.
