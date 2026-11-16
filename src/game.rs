@@ -101,8 +101,43 @@ pub struct Frame{
     pub position:Vec3,pub rotation:[f64;3],pub legs:[f64;2],pub arms:[f64;2],pub knees:[f64;2],pub elbows:[f64;2],pub spine:[f64;3],pub head:[f64;2],pub breath:f64,pub plumb:bool,pub drops:bool,pub watching:bool,pub screen_hue:f64,
 }
 impl Default for Frame{fn default()->Self{Self{position:Vec3::new(-0.35,0.0,0.50),rotation:[0.0;3],legs:[0.0;2],arms:[0.0;2],knees:[0.04;2],elbows:[0.12;2],spine:[0.0;3],head:[0.0;2],breath:0.0,plumb:true,drops:false,watching:false,screen_hue:0.0}}}
-impl Frame{pub fn gait(&mut self,time:f64,moving:bool){self.breath=(time*1.8).sin()*0.003;if moving{// Synchronize cadence with actual ground speed (1.65 m/s): ~0.72 m per step.
-            let stride=time*std::f64::consts::TAU*1.65/1.44;for i in 0..2{let wave=(stride+i as f64*PI).sin();self.legs[i]=wave*0.32;self.knees[i]=(-wave).max(0.0)*0.38+0.04;self.arms[i]=-wave*0.22;self.elbows[i]=0.10+wave.abs()*0.06;}self.spine=[0.02,stride.sin()*0.035,(stride*0.5).sin()*0.015];}else{self.legs=[0.0;2];self.knees=[0.04;2];self.arms=[-0.03;2];self.elbows=[0.12;2];self.spine=[0.0;3];}}}
+impl Frame {
+    /// A complete left/right stride is 1.44 m. Each foot supports the body
+    /// for about 60% of its cycle and swings forward for the remaining 40%.
+    /// The caller supplies distance / walking_speed, so stopping freezes phase.
+    pub fn gait(&mut self, distance_time: f64, moving: bool) {
+        self.breath = (distance_time * 1.8).sin() * 0.003;
+        if !moving {
+            self.legs = [0.0; 2];
+            self.knees = [0.04; 2];
+            self.arms = [-0.03; 2];
+            self.elbows = [0.12; 2];
+            self.spine = [0.0; 3];
+            return;
+        }
+        let cycle = distance_time * 1.65 / 1.44;
+        for side in 0..2 {
+            let phase = (cycle + side as f64 * 0.5).rem_euclid(1.0);
+            let (hip, knee) = if phase < 0.6 {
+                // Stance: the planted leg travels backward relative to the hip.
+                let t = phase / 0.6;
+                let absorption = (t * std::f64::consts::PI).sin().max(0.0);
+                (0.26 - 0.51 * t, 0.05 + 0.13 * absorption)
+            } else {
+                // Swing: the unloaded knee lifts before the foot advances.
+                let t = (phase - 0.6) / 0.4;
+                let ease = t * t * (3.0 - 2.0 * t);
+                (-0.25 + 0.51 * ease, 0.06 + 0.43 * (std::f64::consts::PI * t).sin())
+            };
+            self.legs[side] = hip;
+            self.knees[side] = knee;
+            self.arms[side] = -hip * 0.70;
+            self.elbows[side] = 0.10 + 0.08 * knee;
+        }
+        let stride = cycle * std::f64::consts::TAU;
+        self.spine = [0.015, stride.sin() * 0.018, (stride * 2.0).sin() * 0.012];
+    }
+}
 
 #[derive(Debug)]
 pub struct Game{
