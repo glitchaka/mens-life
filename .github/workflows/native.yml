@@ -13,12 +13,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release
+      - name: Smoke-test real Windows startup and renderer
+        shell: pwsh
+        run: .\\tools\\smoke-runtime.ps1
       - shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts/mens-life-windows-x64/assets/fonts
           New-Item -ItemType Directory -Force artifacts/mens-life-windows-x64/assets/house
           Copy-Item target/release/mens-life.exe, README.md, THIRD_PARTY.md, install.cmd artifacts/mens-life-windows-x64/
           Copy-Item assets/fonts/*.txt artifacts/mens-life-windows-x64/assets/fonts/
+          foreach ($name in @('anime_girl_mia_ter_excited_preview.glb', 'kurumi_schoolgirl_-_bourin.glb', 'mai_maid_-bourin.glb', 'rigged_anime_girl_outfits__facial_expressions.glb')) {
+            Copy-Item "assets/$name" "artifacts/mens-life-windows-x64/assets/$name"
+          }
           Copy-Item assets/house/house.glb artifacts/mens-life-windows-x64/assets/house/house.glb
           New-Item -ItemType Directory -Force artifacts/mens-life-windows-x64/MSPA-Lib
           Copy-Item vendor/MSPA-Lib/UPSTREAM.md, vendor/MSPA-Lib/README.md artifacts/mens-life-windows-x64/MSPA-Lib/
