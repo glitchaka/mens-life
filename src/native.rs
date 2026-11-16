@@ -59,9 +59,9 @@ fn asset_root()->String {
     candidates.into_iter().find(|p|p.is_dir()).unwrap_or_else(||PathBuf::from("assets")).to_string_lossy().into_owned()
 }
 
-pub fn run(){
+pub fn run()->AppExit{
     let mut capture=Capture::default();let mut args=std::env::args().skip(1);
-    while let Some(arg)=args.next(){match arg.as_str(){"--capture"=>capture.path=args.next(),"--start"=>capture.skip_creator=true,"--task"=>capture.task=args.next().and_then(|s|Task::parse(&s)),"--simulate"=>capture.simulate=args.next().and_then(|s|s.parse().ok()).unwrap_or(0),"--help"=>{println!("Vida Isométrica 3D\n  cargo run --release\n  --capture archivo.png [--start] [--task bed|tv|shower|toilet|eat] [--simulate frames]");return;},_=>{eprintln!("Argumento desconocido: {arg}");std::process::exit(2);}}}
+    while let Some(arg)=args.next(){match arg.as_str(){"--capture"=>capture.path=args.next(),"--start"=>capture.skip_creator=true,"--task"=>capture.task=args.next().and_then(|s|Task::parse(&s)),"--simulate"=>capture.simulate=args.next().and_then(|s|s.parse().ok()).unwrap_or(0),"--help"=>{println!("Vida Isométrica 3D\n  cargo run --release\n  --capture archivo.png [--start] [--task bed|tv|shower|toilet|eat] [--simulate frames]");return AppExit::Success;},_=>{eprintln!("Argumento desconocido: {arg}");return AppExit::Error(std::num::NonZeroU8::new(2).unwrap());}}}
     let mut seed=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()as u64;
     let random=(0..90).map(|_|{seed=seed.wrapping_mul(6364136223846793005).wrapping_add(1);(seed>>11)as f64/(1u64<<53)as f64}).collect::<Vec<_>>();
     let avatar=Avatar::default();let spec=scene::build(&avatar,&random);let mut game=Game::new(Navigation::new(geometry::navigation_bounds(&spec)),spec.drops_y);game.set_profile(avatar.character as u64+1);game.creator=!capture.skip_creator;let society=Society::new(&game.navigation,avatar.character);
@@ -80,7 +80,7 @@ pub fn run(){
         .add_systems(PreUpdate,configure_interface.after(EguiPreUpdateSet::InitContexts).before(EguiPreUpdateSet::BeginPass))
         .add_systems(EguiPrimaryContextPass,interface)
         .add_systems(Update,(apply_selection,advance,perceive_world,resolve_gltf,tag_cutaway_parts,tag_procedural_bones,setup_character_animations,rotate_camera,animate,procedural_gait,pick,capture_frame).chain())
-        .run();
+        .run()
 }
 include!("native_scene.inc.rs");
 include!("native_runtime.inc.rs");
