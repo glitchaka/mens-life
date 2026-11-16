@@ -79,4 +79,6 @@ for name in ASSETS:
                     if seglen < 2:
                         break
                     pos += 2 + seglen
-            print(f"  texture[{i}] {image.get('name','')} {width}x{height} embedded={length} mime={image.get('mimeType','?')}")
+            depth = raw[24] if raw.startswith(bytes([137,80,78,71])) and len(raw)>25 else 0
+            color_type = raw[25] if raw.startswith(bytes([137,80,78,71])) and len(raw)>25 else 0
+            print(f"  texture[{i}] {image.get('name','')} {width}x{height} png_depth={depth} color_type={color_type} embedded={length} mime={image.get('mimeType','?')}")
