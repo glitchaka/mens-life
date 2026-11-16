@@ -1,23 +1,73 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 const HOUSE_ASSET_BYTES: u64 = 1_110_460;
 
-fn verify_house_asset() {
-    let target = Path::new("assets/house/house.glb");
-    println!("cargo:rerun-if-changed={}", target.display());
-
-    let bytes = fs::read(target).expect(
-        "PSX Backroom is missing from assets/house/house.glb. Run install.cmd (or tools/ensure-assets.ps1) before building.",
-    );
-    assert_eq!(
-        bytes.len() as u64,
-        HOUSE_ASSET_BYTES,
-        "PSX Backroom package size mismatch",
-    );
-    assert!(bytes.starts_with(b"glTF"), "PSX Backroom package is not a GLB");
-    assert!(bytes.len() >= 12, "PSX Backroom GLB header is truncated");
+fn validate_house_asset(bytes: &[u8]) -> Result<(), &'static str> {
+    if bytes.len() as u64 != HOUSE_ASSET_BYTES {
+        return Err("PSX Backroom package size mismatch");
+    }
+    if !bytes.starts_with(b"glTF") {
+        return Err("PSX Backroom package is not a GLB");
+    }
+    if u32::from_le_bytes(bytes[4..8].try_into().unwrap()) != 2 {
+        return Err("PSX Backroom must use GLB version 2");
+    }
     let declared = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
-    assert_eq!(declared, bytes.len(), "PSX Backroom GLB length header mismatch");
+    if declared != bytes.len() {
+        return Err("PSX Backroom GLB length header mismatch");
+    }
+    Ok(())
+}
+
+fn verify_house_asset() {
+    let root = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let target = root.join("assets/house/house.glb");
+    println!("cargo:rerun-if-changed=assets/house/house.glb");
+    println!("cargo:rerun-if-changed=tools/ensure-assets.ps1");
+    println!("cargo:rerun-if-env-changed=CARGO_NET_OFFLINE");
+
+    // A clean checkout omits this licensed runtime asset. Direct Cargo builds
+    // must prepare it just like install.cmd, before compiling the native bridge.
+    if !target.is_file() {
+        assert!(
+            std::env::var("CARGO_NET_OFFLINE").as_deref() != Ok("true"),
+            "PSX Backroom is missing. Restore assets/house/house.glb or build once with network access before using CARGO_NET_OFFLINE=true.",
+        );
+        println!("cargo:warning=Preparing missing PSX Backroom runtime asset...");
+        let output = if cfg!(windows) {
+            Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+                .arg(root.join("tools/ensure-assets.ps1"))
+                .current_dir(&root)
+                .output()
+                .expect("Cannot start PowerShell to prepare assets/house/house.glb")
+        } else {
+            fs::create_dir_all(target.parent().unwrap()).expect("Cannot create house asset directory");
+            let temporary = root.join("assets/house/house.glb.download");
+            let output = Command::new("curl")
+                .args(["--fail", "--location", "--connect-timeout", "20", "--max-time", "180", "--output"])
+                .arg(&temporary)
+                .arg("https://raw.githubusercontent.com/crazy0codes/hollow-ward/bfed478dd712872cdfe764c4c669a2a8616dea67/public/assets/psx_-_backroom.glb")
+                .output()
+                .expect("curl is required to prepare the missing house asset");
+            if output.status.success() {
+                let bytes = fs::read(&temporary).expect("Cannot read downloaded house asset");
+                if let Err(error) = validate_house_asset(&bytes) {
+                    let _ = fs::remove_file(&temporary);
+                    panic!("Downloaded house asset is invalid: {error}");
+                }
+                fs::rename(&temporary, &target).expect("Cannot install downloaded house asset");
+            } else {
+                let _ = fs::remove_file(&temporary);
+            }
+            output
+        };
+        assert!(output.status.success(),
+            "Cannot prepare PSX Backroom. Check network access to raw.githubusercontent.com or restore assets/house/house.glb.\n{}\n{}",
+            String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    }
+    let bytes = fs::read(&target).expect("Cannot read assets/house/house.glb after asset preparation");
+    validate_house_asset(&bytes).unwrap_or_else(|error| panic!("{error}: {}", target.display()));
 }
 
 fn sources(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
