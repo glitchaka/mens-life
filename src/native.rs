@@ -37,8 +37,8 @@ struct Life { game: Game, avatar: Avatar, society: Society, haunting: Haunting, 
 #[derive(Component)] struct CharacterAnimation { profile_index: usize, idle: Option<AnimationNodeIndex>, walk: Option<AnimationNodeIndex>, walking: bool }
 #[derive(Clone, Copy)] enum ProceduralBoneKind { UpperLegL, UpperLegR, LowerLegL, LowerLegR, UpperArmL, UpperArmR, LowerArmL, LowerArmR }
 #[derive(Component)] struct ProceduralBone { profile_index: usize, kind: ProceduralBoneKind, rest: Quat }
-#[derive(Resource)] struct CameraOrbit { yaw: f32, radius: f32, height: f32 }
-impl Default for CameraOrbit { fn default() -> Self { Self { yaw: 0.72, radius: 10.5, height: 8.5 } } }
+#[derive(Resource)] struct CameraOrbit { yaw: f32, radius: f32, height: f32, zoom: f32 }
+impl Default for CameraOrbit { fn default() -> Self { Self { yaw: 0.72, radius: 10.5, height: 8.5, zoom: 1.0 } } }
 #[derive(Resource, Default)] struct Materials(HashMap<String, Handle<StandardMaterial>>);
 #[derive(Resource, Default)] struct Capture { path: Option<String>, frame: u32, requested: bool, skip_creator: bool, task: Option<Task>, simulate: u32 }
 
