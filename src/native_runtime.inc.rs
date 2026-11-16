@@ -113,19 +113,27 @@ fn setup_character_animations(
 
 fn rotate_camera(
     time:Res<Time>,keys:Res<ButtonInput<KeyCode>>,buttons:Res<ButtonInput<MouseButton>>,
-    mouse:Res<bevy::input::mouse::AccumulatedMouseMotion>,mut orbit:ResMut<CameraOrbit>,
-    mut camera:Single<&mut Transform,With<CameraRig>>,life:Res<Life>,mut cutaway:Query<(&CutawayPart,&mut Visibility)>,
+    mouse:Res<bevy::input::mouse::AccumulatedMouseMotion>,scroll:Res<bevy::input::mouse::AccumulatedMouseScroll>,mut orbit:ResMut<CameraOrbit>,
+    mut camera:Single<(&mut Transform,&mut Projection),With<CameraRig>>,life:Res<Life>,mut cutaway:Query<(&CutawayPart,&mut Visibility)>,
 ){
     let mut delta=0.0;
     if keys.pressed(KeyCode::KeyQ)||keys.pressed(KeyCode::ArrowLeft){delta+=time.delta_secs()*1.25;}
     if keys.pressed(KeyCode::KeyE)||keys.pressed(KeyCode::ArrowRight){delta-=time.delta_secs()*1.25;}
     if buttons.pressed(MouseButton::Right){delta-=mouse.delta.x*0.008;}
     orbit.yaw=(orbit.yaw+delta).rem_euclid(std::f32::consts::TAU);
+    // Orthographic zoom must change projection scale; moving the camera does not zoom.
+    if scroll.delta.y.abs()>f32::EPSILON {
+        orbit.zoom=(orbit.zoom*0.88_f32.powf(scroll.delta.y)).clamp(0.35,3.5);
+    }
+    let (mut camera_transform,mut projection)=camera.into_inner();
+    if let Projection::Orthographic(ref mut ortho)=*projection {
+        ortho.scale=orbit.zoom;
+    }
 
     let p=life.game.ground_position;
     let focus=Vec3::new(p.x as f32,0.9,p.z as f32);
     let offset=Vec3::new(orbit.yaw.sin()*orbit.radius,orbit.height,orbit.yaw.cos()*orbit.radius);
-    **camera=Transform::from_translation(focus+offset).looking_at(focus,Vec3::Y);
+    *camera_transform=Transform::from_translation(focus+offset).looking_at(focus,Vec3::Y);
 
     let indoors=(-23.45..=23.45).contains(&p.x)&&(-27.51..=27.51).contains(&p.z);
     let sx=offset.x.signum();let sz=offset.z.signum();
@@ -208,7 +216,10 @@ fn animate(
 
 fn procedural_gait(life:Res<Life>,mut bones:Query<(&ProceduralBone,&mut Transform)>){
     for(bone,mut transform)in &mut bones{
-        if !character_is_moving(&life,bone.profile_index){continue;}
+        if !character_is_moving(&life,bone.profile_index){
+            transform.rotation=bone.rest;
+            continue;
+        }
         let frame=if bone.profile_index==life.avatar.character{&life.game.frame}else{
             let Some(resident)=life.society.residents.iter().find(|r|r.profile_index==bone.profile_index)else{continue;};
             &resident.frame
@@ -225,8 +236,9 @@ fn procedural_gait(life:Res<Life>,mut bones:Query<(&ProceduralBone,&mut Transfor
             ProceduralBoneKind::UpperLegL|ProceduralBoneKind::UpperLegR=>bone.rest*Quat::from_rotation_x(leg),
             ProceduralBoneKind::LowerLegL|ProceduralBoneKind::LowerLegR=>bone.rest*Quat::from_rotation_x(-knee*0.72),
             ProceduralBoneKind::UpperArmL|ProceduralBoneKind::UpperArmR=>{
-                let down=Quat::from_rotation_z(if left{-1.15}else{1.15});
-                bone.rest*down*Quat::from_rotation_x(arm)
+                // Preserve the authored shoulder rest pose: a 66-degree offset
+                // makes every procedural character walk with raised arms.
+                bone.rest*Quat::from_rotation_x(arm)
             },
             ProceduralBoneKind::LowerArmL|ProceduralBoneKind::LowerArmR=>bone.rest*Quat::from_rotation_x(-elbow*0.55),
         };
