@@ -43,6 +43,26 @@ fn setup(
         },
     ));
 
+    // Furnish the actual rendered scene, not merely the invisible task proxies.
+    // Asset files are tracked in assets/; their transformations are kept in one
+    // explicit catalog so they can be calibrated per GLB without touching gameplay.
+    for (name, file, position, yaw, scale) in [
+        ("Bedroom bed", "bed.glb", [-4.03, 0.0, 2.08], 0.0_f32, 1.0_f32),
+        ("Living room sofa", "sofa.glb", [-3.67, 0.0, 0.35], 0.0, 1.0),
+        ("Dining table", "classic_table.glb", [-2.20, 0.0, -1.12], 0.0, 1.0),
+        ("Dining chair", "old_wooden_chair_05_low-poly_pbr.glb", [-2.90, 0.0, -1.12], 0.0, 1.0),
+    ] {
+        commands.spawn((
+            gltf_asset(&asset_server,file),
+            Name::new(name),
+            Transform {
+                translation: Vec3::from_array(position),
+                rotation: Quat::from_rotation_y(yaw),
+                scale: Vec3::splat(scale),
+            },
+        ));
+    }
+
     // Visible architecture comes from the GLB. Gameplay geometry is invisible and
     // only supplies interaction proxies while the Backroom interaction map is calibrated.
     for(profile_index,spec)in CHARACTERS.iter().enumerate(){
