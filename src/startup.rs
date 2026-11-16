@@ -1,5 +1,5 @@
 //! Fatal startup errors must remain visible in the Windows GUI executable.
-use std::{backtrace::Backtrace, fs, path::PathBuf, sync::atomic::{AtomicBool, Ordering}};
+use std::{backtrace::Backtrace, fs, sync::atomic::{AtomicBool, Ordering}};
 
 static REPORTED: AtomicBool = AtomicBool::new(false);
 
@@ -19,13 +19,10 @@ pub fn install() {
 
 pub fn report(details: &str) {
     if REPORTED.swap(true, Ordering::SeqCst) { return; }
-    let candidates = [
-        std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("mens-life")),
-        Some(std::env::temp_dir().join("mens-life")),
-    ];
-    let saved = candidates.into_iter().flatten().find_map(|directory| {
-        fs::create_dir_all(&directory).ok()?;
-        let path = directory.join("last-crash.txt");
+    // Keep reports inside the installation, independently of the launch directory.
+    // If that directory is not writable, show the error without writing elsewhere.
+    let saved = std::env::current_exe().ok().and_then(|exe| {
+        let path = exe.parent()?.join("last-crash.txt");
         fs::write(&path, details).ok()?;
         Some(path)
     });
