@@ -47,7 +47,7 @@ pub fn report(details: &str) {
     let message = format!("El juego encontró un error fatal.\n\n{location}\n\n{details}");
     eprintln!("{message}");
     // Automated capture runs must fail without waiting for a modal dialog.
-    if std::env::args().any(|a| a == "--capture") { return; }
+    if std::env::args().any(|a| a == "--capture" || a == "--smoke") { return; }
     show_error(&message);
 }
 
