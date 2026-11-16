@@ -101,7 +101,8 @@ pub struct Frame{
     pub position:Vec3,pub rotation:[f64;3],pub legs:[f64;2],pub arms:[f64;2],pub knees:[f64;2],pub elbows:[f64;2],pub spine:[f64;3],pub head:[f64;2],pub breath:f64,pub plumb:bool,pub drops:bool,pub watching:bool,pub screen_hue:f64,
 }
 impl Default for Frame{fn default()->Self{Self{position:Vec3::new(-0.35,0.0,0.50),rotation:[0.0;3],legs:[0.0;2],arms:[0.0;2],knees:[0.04;2],elbows:[0.12;2],spine:[0.0;3],head:[0.0;2],breath:0.0,plumb:true,drops:false,watching:false,screen_hue:0.0}}}
-impl Frame{pub fn gait(&mut self,time:f64,moving:bool){self.breath=(time*1.8).sin()*0.003;if moving{let stride=time*7.2;for i in 0..2{let wave=(stride+i as f64*PI).sin();self.legs[i]=wave*0.38;self.knees[i]=wave.max(0.0)*0.65+0.05;self.arms[i]=-wave*0.23;self.elbows[i]=0.16+wave.abs()*0.1;}self.spine=[0.02,stride.sin()*0.035,(stride*0.5).sin()*0.015];}else{self.legs=[0.0;2];self.knees=[0.04;2];self.arms=[-0.03;2];self.elbows=[0.12;2];self.spine=[0.0;3];}}}
+impl Frame{pub fn gait(&mut self,time:f64,moving:bool){self.breath=(time*1.8).sin()*0.003;if moving{// Synchronize cadence with actual ground speed (1.65 m/s): ~0.72 m per step.
+            let stride=time*std::f64::consts::TAU*1.65/1.44;for i in 0..2{let wave=(stride+i as f64*PI).sin();self.legs[i]=wave*0.32;self.knees[i]=(-wave).max(0.0)*0.38+0.04;self.arms[i]=-wave*0.22;self.elbows[i]=0.10+wave.abs()*0.06;}self.spine=[0.02,stride.sin()*0.035,(stride*0.5).sin()*0.015];}else{self.legs=[0.0;2];self.knees=[0.04;2];self.arms=[-0.03;2];self.elbows=[0.12;2];self.spine=[0.0;3];}}}
 
 #[derive(Debug)]
 pub struct Game{
